@@ -1,0 +1,61 @@
+# Target companies for job scanning. Edit freely.
+#
+# Copy this file to companies.yaml and replace the examples below with your
+# own target list. companies.yaml is gitignored, so your list (and any
+# personal notes on warm contacts, prior interviews, etc.) never gets
+# committed.
+#
+# ats_type values:
+#   greenhouse   Uses Greenhouse Job Board API (public, no auth)
+#   lever        Uses Lever public API
+#   ashby        Uses Ashby public job board API
+#   unsupported  Uses an ATS this project doesn't fetch (Workday, iCims,
+#                custom, etc.). Scan skips these with a warning and prints
+#                the careers URL for manual checking. Fill in ats_url so you
+#                have the link handy.
+#
+# ats_slug is the company's identifier in that ATS's URL. To find it:
+#   Greenhouse: boards.greenhouse.io/<slug> or job-boards.greenhouse.io/<slug>
+#   Lever:      jobs.lever.co/<slug>
+#   Ashby:      jobs.ashbyhq.com/<slug>
+# If a scan errors or silently returns 0 jobs for a company you know is
+# hiring, double-check the slug against their live careers page and confirm
+# it's actually on the ATS you think it is -- a misconfigured ats_type
+# fails silently rather than erroring.
+#
+# `tier` is just a number you define the meaning of (e.g. 1 = top-priority
+# warm-contact companies, 2 = strong fit, 3 = worth watching). It's not used
+# by any scoring logic yet, just there for your own organization.
+#
+# `notes` is freeform. Good uses: why this company is on the list, any warm
+# contacts, prior interview history, comp research, verification dates.
+
+companies:
+  - slug: example-greenhouse-co
+    name: Example Greenhouse Co
+    tier: 1
+    ats_type: greenhouse
+    ats_slug: examplegreenhouseco
+    notes: "Replace with a real company. This one demonstrates the Greenhouse config shape."
+
+  - slug: example-lever-co
+    name: Example Lever Co
+    tier: 1
+    ats_type: lever
+    ats_slug: examplelever
+    notes: "Demonstrates the Lever config shape."
+
+  - slug: example-ashby-co
+    name: Example Ashby Co
+    tier: 2
+    ats_type: ashby
+    ats_slug: exampleashby
+    notes: "Demonstrates the Ashby config shape."
+
+  - slug: example-unsupported-co
+    name: Example Unsupported Co
+    tier: 2
+    ats_type: unsupported
+    ats_slug: ""
+    ats_url: "https://example.com/careers"
+    notes: "Demonstrates an unsupported-ATS entry: scan skips it and surfaces this URL for manual checking."

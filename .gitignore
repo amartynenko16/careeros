@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# CareerOS runtime data
+*.db
+*.db-journal
+data/careeros.db
+logs/*.log
+applications/*/
+
+# Personal data and config (see the matching *.example.* files for the
+# templates these are copied from)
+data/facts.yaml
+data/companies.yaml
+data/resume_rules.md
+data/cover_letter_rules.md
+CLAUDE.md
+
+# Secrets
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/

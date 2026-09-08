@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "careeros"
+version = "0.2.1"
+description = "Personal career operating system: job radar plus application engine."
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "pyyaml>=6.0.1",
+    "python-dotenv>=1.0.0",
+    "notion-client>=2.2.1",
+    "httpx>=0.27.0",
+    "python-docx>=1.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+careeros = "careeros.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["careeros"]

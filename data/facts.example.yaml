@@ -1,0 +1,40 @@
+# Immutable facts. These are never rewritten by the system.
+# Edit manually. `careeros init` (or `careeros facts reload`) picks up changes.
+#
+# Copy this file to facts.yaml and fill in your own details. facts.yaml is
+# gitignored, so your personal data never gets committed.
+
+personal:
+  name: Your Name
+  location_display: City, Country
+  email: you@example.com
+  phone: "555-555-5555"
+
+education:
+  - institution: Your University
+    degree: "Bachelor's Degree in Your Field"
+    dates: "20XX to 20XX"
+
+# Employer timeline. Ordered oldest to newest. Only include roles you want
+# considered for resume/cover-letter generation -- if there's earlier work
+# (retail, unrelated industries, etc.) you don't want surfaced, just leave it
+# out here rather than adding an "exclude" flag; the system only ever sees
+# what's in this file.
+employers:
+  - name: Employer One
+    dates: "Mon YYYY to Mon YYYY"
+    title: "Your Title There"
+    notes: "Optional context: what the role was, how it changed over time, why it ended, etc."
+
+  - name: Employer Two
+    dates: "Mon YYYY to Present"
+    title: "Your Current Title"
+    notes: ""
+
+# Certifications: whatever you actually hold, newest to oldest by issue date.
+# Only list ones you can back up if asked (a link, a certificate, a login).
+certifications:
+  - name: "Certification Name"
+    issuer: "Issuing Organization"
+    issued: "Mon YYYY"
+    # expires: "Mon YYYY"   # optional, omit if it doesn't expire

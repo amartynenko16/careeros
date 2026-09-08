@@ -1,0 +1,258 @@
+# CLAUDE.md
+
+Read this on every session start. Copy this file to `CLAUDE.md` (gitignored, so it stays
+yours) and fill in the bracketed sections with your own details. Everything else here
+documents how the system works and is meant to stay mostly as-is, though you should adapt
+the guardrails and design decisions if you disagree with them.
+
+---
+
+## Who this is for
+
+**[Your name].** [A sentence or two of context: current employment status, what you're
+looking for, where you're based. This shapes how the assistant frames your experience, so
+be specific rather than generic.]
+
+Career progression (context for what you can defend in interviews):
+- [Employer] ([dates]), [Title]
+- [Employer] ([dates]), [Title]
+
+Full stable facts (education, certifications, employers, contact) live in `data/facts.yaml`.
+Immutable at runtime; edit the file to change.
+
+---
+
+## Preferences (apply always, without narration)
+
+Adjust these to your own communication style. The defaults below are a reasonable
+starting point:
+
+- **No sycophancy.** Skip "great question," "I'd be happy to," etc. Get to the answer.
+- **Flag confidence under 90%** at the end of any response with uncertain claims. Keep it terse.
+- **No fabrication, ever.** Especially resume content: never invent metrics, tools, or claims
+  you haven't stated. If a bullet is thin, flag it and ask, don't fill the gap.
+- **Simpler is better** when there's a design choice. Bias to less, not more.
+- **Honesty over positioning.** If you tag records "Never Claim" for a reason, respect that.
+
+---
+
+## What CareerOS is
+
+A personal career operating system. Job radar (fetch open roles from target companies,
+filter, rank) plus application engine (generate tailored application packages from a
+curated experience bank).
+
+**Design decisions worth preserving:**
+
+1. **Notion is the source of truth for experience data.** An Experience Bank database in
+   your Notion workspace holds all your career records. Local SQLite mirrors it via
+   one-way sync. Never write to Notion casually; only on your explicit approval.
+
+2. **The Bank has a single canonical bullet per record.** Resist the temptation to keep
+   multiple length/tone variants (Ambitious/Standard/Minimal, etc.) per record unless you
+   have a concrete reason to need them at runtime -- one well-refined "Standard" bullet per
+   record, kept resume-ready length, is simpler to maintain and tailor from.
+
+3. **Model B2 tailoring.** At resume-generation time, CareerOS produces a "tailoring
+   package": selected bullets + job description + a strict no-fabrication prompt. You paste
+   that into Claude Code (or another LLM), get rephrased bullets back, feed them into the
+   resume generator. Rationale: keeps CareerOS runtime LLM-free, model-agnostic, and puts
+   the rephrasing under human review.
+
+4. **Deterministic scoring, no LLM at runtime.** Everything CareerOS does automatically is
+   rules-based. LLMs are used at write time (dev tooling) and optionally at resume-tailoring
+   time (per #3), never inside the running system.
+
+5. **Local enrichment columns are preserved across syncs.** Whatever local-only columns you
+   add to enrich the Bank locally (vetting decisions, inferred categories, etc.) should never
+   be overwritten by `careeros sync`. This lets you enrich the local model without polluting
+   Notion with fields you didn't add there.
+
+6. **Job status is preserved across scans.** If you save/reject/mark-applied a job and the
+   next scan pulls it again, the status stays. Only the ATS-side fields refresh.
+
+7. **Coach's gap analysis is grounded only in the Bank's own vocabulary, no external skills
+   dictionary.** `careeros coach` matches JD text against each Bank record's `tech_tools_json`
+   terms, never against a curated list of "things a role like this typically requires."
+   Rationale: an external dictionary would flag terms as "gaps" that were never actually
+   relevant to your real experience, which is exactly the kind of fabricated-relevance
+   problem the no-fabrication rule exists to prevent. The tradeoff: Coach won't proactively
+   surface a brand-new tool it's never seen in the Bank, even if the JD emphasizes it. That's
+   intentional; extending the vocabulary is something to do consciously (adding real tools to
+   a Bank record's `tech_tools_json` in Notion), not something Coach should guess at.
+
+---
+
+## Job search criteria (drives scan + eventual scoring)
+
+Fill this in with your own targeting rules. Example shape:
+
+- **Target roles:** [role titles/types you want surfaced]
+- **Exclusions:** [role titles/types to filter out, and why]
+- **Geo:** [commute radius / remote policy you'll accept]
+- **Company stage:** [e.g. "above true startup," "Series B+," no constraint]
+- **Industry:** [if you have one]
+- **Comp floor:** [hard minimum, and how to treat roles that don't disclose comp]
+- **Volume:** [fixed target company list vs. open-ended search]
+- **Warm contacts:** [companies where you have a referral or prior process, and through whom]
+
+---
+
+## Current status
+
+Keep a running log here of what's built, what's in progress, and non-obvious decisions and
+fixes as you go -- this is what lets a new session pick up context instead of re-deriving it.
+A good entry names the date, what changed, why, and any gotcha a future session would
+otherwise rediscover the hard way. Delete this paragraph once you've written your first
+real entries.
+
+---
+
+## What to do first in a new session
+
+1. Read this file (done if you're here).
+2. `careeros status` to see current DB state.
+3. If bank_records is 0, run `careeros sync`. If jobs is 0 or stale, run `careeros scan`.
+4. Ask what you want to work on. Don't assume.
+
+---
+
+## Commands cheatsheet
+
+```
+# Setup (one time; assumes .venv is already created)
+source .venv/bin/activate
+
+# Every session
+careeros status                    # DB row counts
+careeros sync                      # pull Bank from Notion
+careeros scan                      # fetch open jobs across supported companies
+careeros jobs list                 # new-status jobs
+careeros jobs list --status saved  # shortlist
+careeros jobs view <id>            # full details
+careeros jobs save <id>            # mark saved
+careeros jobs reject <id>          # mark rejected
+careeros jobs mark-applied <id>    # mark applied
+careeros jobs stage <id> <stage>   # set post-application stage -- define your own
+                                    # stage vocabulary and keep jobs.VALID_STAGES in sync
+careeros jobs set-remote-type <id> <type>  # correct remote/hybrid/onsite/unknown
+careeros jobs clear                # delete all new-status jobs (preserves triaged)
+careeros coach analyze <id>        # match Bank tech/tools against a job's description
+careeros coach compare             # rank saved jobs by Bank match strength
+
+# Data / config
+careeros facts show
+careeros facts reload              # after editing data/facts.yaml
+careeros companies show
+careeros companies reload          # after editing data/companies.yaml (upserts by slug,
+                                    # safe to run anytime)
+
+# Vetting (usually done in Notion directly; this is the local fallback)
+careeros vet [--all]
+
+# Application engine (Phase 4)
+careeros tailor <job_id>                              # build a tailoring package
+careeros tailor-budget <bullets_file>                  # character-count check
+careeros resume-build <job_id> --content <json>        # write drafted content into a
+                                                        # copy of your resume template
+careeros cover-letter-build <job_id> --content <json>  # same, for the cover letter
+```
+
+---
+
+## Project structure
+
+```
+~/CareerOS/
+├── careeros/
+│   ├── cli.py             Typer entry point
+│   ├── config.py          Paths and .env loading
+│   ├── db.py              SQLite schema and connection helpers
+│   ├── facts.py           Immutable facts loader
+│   ├── companies.py       Target companies loader
+│   ├── notion_sync.py     One-way Bank sync from Notion (Notion → local)
+│   ├── notion_apps.py     One-way Applications push to Notion (local → Notion, opposite direction)
+│   ├── vet.py             Interactive vetting flow
+│   ├── scan.py            Job fetch orchestrator
+│   ├── jobs.py            Job triage (list, view, status, clear)
+│   ├── intake.py          Manual job intake (URL or pasted JD) + geo_eligible()
+│   ├── coach.py           Gap analysis: match Bank tech/tools against a job
+│   ├── tailor.py          Tailoring package generator + budget check
+│   ├── resume.py          DOCX resume builder (writes drafted content into a template)
+│   ├── cover_letter.py    DOCX cover letter builder (same pattern, simpler template)
+│   └── fetchers/
+│       ├── base.py        Role keyword filter (positive + negative lists) + geo_eligible()
+│       ├── greenhouse.py
+│       ├── lever.py
+│       └── ashby.py
+├── data/
+│   ├── facts.yaml               Immutable personal / education / employer / cert data (gitignored)
+│   ├── facts.example.yaml       Template -- copy to facts.yaml
+│   ├── companies.yaml           Target companies with ATS assignments (gitignored)
+│   ├── companies.example.yaml   Template -- copy to companies.yaml
+│   ├── resume_rules.md          Resume-tailoring session rules, read before editing your resume
+│   ├── cover_letter_rules.md    Cover-letter session rules
+│   └── careeros.db              SQLite (gitignored)
+├── tests/                 pytest suite
+├── logs/                  scan.log / scan.error.log if you set up scheduled scanning
+├── applications/          Phase 4 output destination (gitignored)
+├── .env                   NOTION_TOKEN and data source IDs (gitignored)
+├── .env.example
+├── pyproject.toml
+├── CLAUDE.md               your personal instance (gitignored)
+└── CLAUDE.md.example       this file
+```
+
+---
+
+## Guardrails and gotchas
+
+- **Never write to Notion without explicit approval.** The connection has update permission;
+  the constraint is behavioral. When you say "approved" for a batch of proposed changes,
+  that's the trigger.
+- **Never invent metrics, tools, or claims** when helping with the Bank or resume tailoring.
+  If a claim isn't grounded in your notes, Bullet Standard, or Metrics, ask, don't fill.
+- **Never surface records tagged `Never Claim`** in any generated resume or cover letter,
+  period -- define this tag (or your own equivalent) in your Notion Bank for anything you
+  don't want to risk being asked about.
+- **Preserve local enrichment columns on sync.** The sync module handles this; don't change
+  that behavior without discussion.
+- **Preserve user status on scan.** Same.
+- **Role keyword filter lives in `careeros/fetchers/base.py`.** Edit `ROLE_KEYWORDS` and
+  `NEGATIVE_KEYWORDS` there to include or exclude role types. Document *why* a keyword is
+  excluded (e.g. a title that means something different at one company than another) so a
+  future session doesn't second-guess it without context.
+- **Geo eligibility filter lives in the same file** (`geo_eligible()`). It works off the
+  *resolved* location (after falling back to parsing the JD body when the ATS field is
+  vague), plus a narrow regex for explicit residency/timezone restriction phrases in the JD
+  body. Broad region tags (e.g. an ATS's "AMER" label) are treated as open to your location
+  by default -- if that's wrong for you (e.g. you're outside the US and "AMER" postings turn
+  out to be US-only in practice), tighten it and re-check your existing backlog against the
+  fix, the same way you'd re-check after any filter change.
+- **ATS coverage is imperfect.** Companies with no public ATS API (Workday, custom systems,
+  etc.) are marked `ats_type: unsupported`. Scan skips them and prints their careers URL for
+  manual check. Building a Workday fetcher is a real rabbit hole; think twice before starting.
+- **Tests run without network.** Fetcher tests use `httpx.MockTransport`. Real ATS calls
+  happen only when running `careeros scan`.
+- **Notion API version.** Uses `notion-client>=2.2.1`, which uses `data_sources.query()` (not
+  the deprecated `databases.query()`). If the library changes again, this is where breakage
+  would surface first.
+
+---
+
+## Ideas for extending this
+
+- **Coach v2, if the grounded-only approach (decision #7) proves too narrow in practice.**
+  Options to revisit deliberately, not by default: a curated skills dictionary for your
+  target role type (accepts fabrication risk for broader coverage), or a Claude Code handoff
+  package (JD + matched/unmatched records) for a human+AI judgment pass, mirroring the Model
+  B2 pattern.
+- **Scheduled scanning.** A macOS `launchd` LaunchAgent works for a "runs while my laptop is
+  on" setup; a cloud-hosted agent with the DB made cloud-accessible (git-synced or hosted)
+  would be needed for "runs even when my laptop is off," which is a bigger lift.
+- **Desktop notifications on scan completion** via `osascript` if you want a heartbeat that
+  the pipeline ran, independent of whether it found anything new.
+
+Whatever you build, keep a decision log in the "Current status" section above -- the value
+of this file compounds as it accumulates the *why* behind non-obvious choices, not just the
+*what*.
