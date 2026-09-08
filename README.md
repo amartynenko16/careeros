@@ -1,7 +1,17 @@
 # CareerOS
 
-A personal career operating system, built to run locally and be directed conversationally
-via Claude Code (or another coding-agent LLM). Two pieces:
+A personal career operating system for job hunting: a job radar that scans target
+companies' postings and filters out the noise, plus an application engine that turns your
+real career history into tailored, no-fabrication resumes and cover letters. Built to be
+directed conversationally through Claude Code (or any coding-agent LLM) rather than clicked
+through a UI -- you don't need to write code to run it, just to be comfortable following
+setup steps in a terminal.
+
+This is the engine, stripped of my personal data, so you can fork it and point it at your
+own job search. See "About" below for why this exists, and Setup to get your own copy
+running.
+
+Two pieces:
 
 - **Job radar**: scans target companies' public ATS boards (Greenhouse, Lever, Ashby),
   filters by your own role/geo criteria, and tracks triage state (saved / rejected / applied)
@@ -18,6 +28,22 @@ resume content, never write to your Notion workspace without asking first).
 
 This repo is the shareable engine. Your personal data (facts, target companies, resume
 templates, Notion credentials) never ships in it -- see Setup below.
+
+## About
+
+I'm Alex Martynenko, laid off from Arteria AI in August 2026 and running an active
+post-sales technical job search. I built CareerOS to bring some system to that process: a
+curated experience bank I don't have to re-explain every application, a scanner that only
+shows me roles worth looking at, and a tailoring flow that won't let me (or an assistant)
+fabricate a claim on a resume.
+
+I'm sharing it publicly for two reasons: if you're job hunting too -- from Arteria or
+anywhere else -- I'd rather you have this than rebuild it from scratch. And if you're
+someone who might be hiring for post-sales/technical roles, this is a decent sample of how
+I actually work with AI tooling day to day, which is a real part of what I do.
+
+Happy to answer questions or take a look at your fork --
+[linkedin.com/in/alex-martynenko](https://www.linkedin.com/in/alex-martynenko).
 
 ## Prerequisites
 
