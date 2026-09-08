@@ -64,17 +64,18 @@ def test_facts_load_and_lookup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert facts.get("does.not.exist") is None
 
 
-def test_facts_yaml_ships_valid() -> None:
-    """The shipped data/facts.yaml parses and contains expected sections."""
+def test_facts_example_yaml_ships_valid() -> None:
+    """The shipped data/facts.example.yaml (the actual template, since real
+    facts.yaml is gitignored personal data) parses and has the expected
+    top-level sections and shape -- not exact counts, since anyone copying
+    this template will change them immediately."""
     import yaml
 
-    path = DATA_DIR / "facts.yaml"
-    if not path.exists():
-        pytest.skip("shipped facts.yaml not present")
+    path = DATA_DIR / "facts.example.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert "personal" in data
     assert "education" in data
     assert "employers" in data
     assert "certifications" in data
-    assert len(data["certifications"]) == 13
-    assert len(data["employers"]) == 4
+    assert len(data["employers"]) >= 1
+    assert len(data["certifications"]) >= 1
