@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     status_at         TEXT,
     application_stage TEXT,               -- 1. Phone Screen, 2. First Round Interview, 3. Second Round Interview, 4. Final Round, 5. Offer, Rejected by Company, Withdrawn (only meaningful once status='applied'; empty means Notion's Status formula shows "Applied")
     application_stage_at  TEXT,
-    date_applied      TEXT,               -- date (not datetime) Alex actually applied; distinct from status_at, which is when the DB row changed
+    date_applied      TEXT,               -- date (not datetime) you actually applied; distinct from status_at, which is when the DB row changed
     notion_applications_page_id  TEXT,    -- Notion page id in the 📋 Applications database, set on first push, used to upsert instead of duplicating
     notion_last_synced_at  TEXT
 );

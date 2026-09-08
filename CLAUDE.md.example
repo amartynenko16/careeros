@@ -180,6 +180,8 @@ careeros cover-letter-build <job_id> --content <json>  # same, for the cover let
 │   ├── tailor.py          Tailoring package generator + budget check
 │   ├── resume.py          DOCX resume builder (writes drafted content into a template)
 │   ├── cover_letter.py    DOCX cover letter builder (same pattern, simpler template)
+│   ├── local_geo.py        Your commute area / open-remote terms (gitignored)
+│   ├── local_geo.example.py  Template -- copy to local_geo.py
 │   └── fetchers/
 │       ├── base.py        Role keyword filter (positive + negative lists) + geo_eligible()
 │       ├── greenhouse.py
@@ -190,8 +192,10 @@ careeros cover-letter-build <job_id> --content <json>  # same, for the cover let
 │   ├── facts.example.yaml       Template -- copy to facts.yaml
 │   ├── companies.yaml           Target companies with ATS assignments (gitignored)
 │   ├── companies.example.yaml   Template -- copy to companies.yaml
-│   ├── resume_rules.md          Resume-tailoring session rules, read before editing your resume
-│   ├── cover_letter_rules.md    Cover-letter session rules
+│   ├── resume_rules.md          Resume-tailoring session rules (gitignored), read before editing your resume
+│   ├── resume_rules.example.md  Template -- copy to resume_rules.md
+│   ├── cover_letter_rules.md    Cover-letter session rules (gitignored)
+│   ├── cover_letter_rules.example.md  Template -- copy to cover_letter_rules.md
 │   └── careeros.db              SQLite (gitignored)
 ├── tests/                 pytest suite
 ├── logs/                  scan.log / scan.error.log if you set up scheduled scanning
@@ -222,13 +226,15 @@ careeros cover-letter-build <job_id> --content <json>  # same, for the cover let
   `NEGATIVE_KEYWORDS` there to include or exclude role types. Document *why* a keyword is
   excluded (e.g. a title that means something different at one company than another) so a
   future session doesn't second-guess it without context.
-- **Geo eligibility filter lives in the same file** (`geo_eligible()`). It works off the
-  *resolved* location (after falling back to parsing the JD body when the ATS field is
-  vague), plus a narrow regex for explicit residency/timezone restriction phrases in the JD
-  body. Broad region tags (e.g. an ATS's "AMER" label) are treated as open to your location
-  by default -- if that's wrong for you (e.g. you're outside the US and "AMER" postings turn
-  out to be US-only in practice), tighten it and re-check your existing backlog against the
-  fix, the same way you'd re-check after any filter change.
+- **Geo eligibility filter lives in `fetchers/base.py`** (`geo_eligible()`), reading your
+  commute area / open-remote terms from `careeros/local_geo.py` (gitignored -- copy from
+  `local_geo.example.py`). It works off the *resolved* location (after falling back to
+  parsing the JD body when the ATS field is vague), plus a narrow regex for explicit
+  residency/timezone restriction phrases in the JD body. Broad region tags (e.g. an ATS's
+  "AMER" label) are treated as open to your location by default -- if that's wrong for you
+  (e.g. you're outside the US and "AMER" postings turn out to be US-only in practice),
+  tighten it and re-check your existing backlog against the fix, the same way you'd
+  re-check after any filter change.
 - **ATS coverage is imperfect.** Companies with no public ATS API (Workday, custom systems,
   etc.) are marked `ats_type: unsupported`. Scan skips them and prints their careers URL for
   manual check. Building a Workday fetcher is a real rabbit hole; think twice before starting.

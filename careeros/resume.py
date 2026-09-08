@@ -4,7 +4,7 @@ CareerOS stays deterministic at runtime (see CLAUDE.md decision #4): this
 module does not decide what content goes into the resume. It takes a
 content file that an LLM tailoring pass (following data/resume_rules.md)
 already produced -- Summary, Personal Projects, and per-employer Experience
-bullets -- and mechanically writes it into a copy of Alex's resume
+bullets -- and mechanically writes it into a copy of your resume
 template, preserving the template's formatting.
 
 Two structural quirks in the template that broke earlier hand-run scripts,
@@ -93,7 +93,7 @@ def set_employer_bullets(doc: docx.Document, employer_name: str, bullets: list[s
 
     Locates the header by scanning for a bold "Normal"-style paragraph
     containing both the employer name and the "•" role/employer
-    separator (e.g. "SENIOR SOLUTIONS CONSULTANT • Arteria AI"), then
+    separator (e.g. "SENIOR ENGINEER • Acme Corp"), then
     takes every immediately-following "List Paragraph"-style paragraph as
     that employer's bullets. Resizes to len(bullets) exactly, growing by
     cloning the last bullet's formatting or shrinking by deleting extras.
@@ -360,11 +360,11 @@ def build(job_id: str, content_path: str, out_path: str | None = None) -> str:
 
     content JSON shape:
         {
-          "template": "/path/to/alex's/existing/tailored/resume.docx",
+          "template": "/path/to/your/existing/tailored/resume.docx",
           "summary": "...",                                  (optional)
           "personal_projects": [{"title": "...", "description": "..."}],  (optional)
           "hard_skills": {"Subcategory Name": "content line"},  (optional)
-          "experience": {"Arteria AI": ["bullet1", ...], "Braze": [...], "Loopio": [...]}
+          "experience": {"Employer One": ["bullet1", ...], "Employer Two": [...]}
         }
 
     Any top-level key may be omitted to leave that section untouched.

@@ -56,13 +56,13 @@ Rules (non-negotiable):
    must not exceed {TOTAL_BULLET_CHAR_BUDGET} characters total (spaces
    included). Give your strongest, most JD-relevant stories more room; keep
    lower-priority bullets short. State your running total as you go and the
-   final total at the end, but treat that as a draft estimate only -- Alex
+   final total at the end, but treat that as a draft estimate only -- you
    will run `careeros tailor budget` to verify the real count before this
    is final.
 7. No em dashes anywhere in the output. Use commas, semicolons, colons, or
    split sentences instead.
 8. Output: for each selected record, the original Standard bullet followed
-   by your tailored rewrite, so the human reviewer (Alex) can compare
+   by your tailored rewrite, so the human reviewer can compare
    before/after and catch anything that drifted from the source.
 
 Never claim records have already been excluded from this package; do not
@@ -190,7 +190,7 @@ def check_budget(path: str) -> dict[str, Any]:
     total in the package prompt is a draft estimate, not authoritative.
     Expects one bullet per line (plain text, or "- "/"-" prefixed Markdown
     list items). Blank lines and lines starting with "#" (headings/comments)
-    are ignored, so Alex can paste the "Tailored" lines straight out of a
+    are ignored, so you can paste the "Tailored" lines straight out of a
     tailored_bullets.md review file.
     """
     text = Path(path).read_text(encoding="utf-8")

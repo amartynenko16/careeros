@@ -16,7 +16,7 @@ manual add path, lives in fetchers/base.py) now runs against each job's
 RESOLVED location before it's ever inserted, same as the role filter: a
 geo-ineligible job is never stored, not stored-then-rejected. This means a
 job that fails geo can't linger as visible clutter, but it also means if
-Alex ever wants to review what got excluded on geo grounds, that data isn't
+you ever want to review what got excluded on geo grounds, that data isn't
 sitting in the jobs table -- geo-eligibility is a hard pre-filter, not a
 triage state.
 """

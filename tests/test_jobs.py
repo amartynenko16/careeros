@@ -1,4 +1,4 @@
-"""Tests for jobs.py triage operations, isolated from Alex's real careeros.db."""
+"""Tests for jobs.py triage operations, isolated from the real careeros.db."""
 
 from pathlib import Path
 

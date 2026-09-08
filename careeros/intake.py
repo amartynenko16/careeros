@@ -1,4 +1,4 @@
-"""Manual job intake: add a role Alex found himself (not from a scan) into
+"""Manual job intake: add a role you found yourself (not from a scan) into
 the same jobs table scanned roles live in, so it goes through the same
 triage/tailor/build pipeline and is never tracked somewhere separate.
 
@@ -11,7 +11,7 @@ Two paths:
 
 Both run the job through the exact same deterministic filters scan.py uses
 (job_matches_role_filter, geo_eligible) and report the result, rather than
-silently accepting or rejecting -- the point is to give Alex (and the LLM
+silently accepting or rejecting -- the point is to give you (and the LLM
 doing the qualitative read alongside this) a real, consistent answer, not
 a second, looser set of rules for hand-found roles.
 """
@@ -143,7 +143,7 @@ def _ensure_company_row(conn, company_slug: str, ats_type: str, now: str) -> Non
                 None,
                 ats_type if ats_type != "manual" else "unsupported",
                 company_slug,
-                "Added via `careeros jobs add` (a role Alex found himself), not part of the curated 43-company target list.",
+                "Added via `careeros jobs add` (a role you found yourself), not part of your curated target list.",
                 now,
             ),
         )

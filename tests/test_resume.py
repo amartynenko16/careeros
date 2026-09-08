@@ -1,9 +1,9 @@
 """Tests for resume.py's DOCX-editing logic.
 
 Builds a small synthetic .docx that reproduces the structural quirks found
-in Alex's real template (multi-run paragraphs, a duplicated Professional
+in a real-world template (multi-run paragraphs, a duplicated Professional
 Summary label simulating the AlternateContent shape fallback) rather than
-depending on his personal file, which lives outside the repo.
+depending on anyone's personal file, which lives outside the repo.
 """
 
 from pathlib import Path
@@ -63,22 +63,22 @@ def _build_synthetic_template(path: Path) -> None:
     doc.add_paragraph("Career OS")
     doc.add_paragraph("A Python project.")
     doc.add_paragraph("")  # blank spacer ends the block
-    # Reproduces a real quirk found in Alex's actual template (2026-09-07):
+    # Reproduces a real quirk found in a real-world template (2026-09-07):
     # an empty "List Paragraph"-styled paragraph sitting right before
     # EXPERIENCE, which can render as a stray floating bullet with no text.
     doc.add_paragraph("", style="List Paragraph")
 
     doc.add_paragraph("EXPERIENCE")
     header = doc.add_paragraph()
-    header.add_run("SENIOR SOLUTIONS CONSULTANT • Arteria AI")
+    header.add_run("SENIOR SOLUTIONS CONSULTANT • Acme Corp")
     doc.add_paragraph("Old bullet one.", style="List Paragraph")
     _add_multirun_paragraph(doc, ["Old bullet two, ", "split ", "across runs."], style="List Paragraph")
     doc.add_paragraph("Old bullet three.", style="List Paragraph")
 
     header2 = doc.add_paragraph()
-    header2.add_run("TECHNICAL ACCOUNT MANAGER • Braze")
-    doc.add_paragraph("Braze bullet one.", style="List Paragraph")
-    doc.add_paragraph("Braze bullet two.", style="List Paragraph")
+    header2.add_run("TECHNICAL ACCOUNT MANAGER • Globex Inc")
+    doc.add_paragraph("Globex Inc bullet one.", style="List Paragraph")
+    doc.add_paragraph("Globex Inc bullet two.", style="List Paragraph")
 
     doc.save(str(path))
 
@@ -181,12 +181,12 @@ def test_strip_empty_list_paragraphs_removes_stray_bullet(template_path: Path) -
     assert after == []
     # real bullets must survive
     assert any("Some achievement." in p.text for p in doc.paragraphs)
-    assert any("Braze bullet two." in p.text for p in doc.paragraphs)
+    assert any("Globex Inc bullet two." in p.text for p in doc.paragraphs)
 
 
 def test_set_employer_bullets_shrinks(template_path: Path) -> None:
     doc = docx.Document(str(template_path))
-    resume.set_employer_bullets(doc, "Arteria AI", ["New bullet one.", "New bullet two."])
+    resume.set_employer_bullets(doc, "Acme Corp", ["New bullet one.", "New bullet two."])
     doc.save(str(template_path))
 
     doc2 = docx.Document(str(template_path))
@@ -194,21 +194,21 @@ def test_set_employer_bullets_shrinks(template_path: Path) -> None:
     assert texts == ["New bullet one.", "New bullet two."]
     # the old third bullet paragraph should be gone
     assert not any("Old bullet three" in p.text for p in doc2.paragraphs)
-    # Braze's untouched bullets survive
-    assert any("Braze bullet one." in p.text for p in doc2.paragraphs)
-    assert any("Braze bullet two." in p.text for p in doc2.paragraphs)
+    # Globex Inc's untouched bullets survive
+    assert any("Globex Inc bullet one." in p.text for p in doc2.paragraphs)
+    assert any("Globex Inc bullet two." in p.text for p in doc2.paragraphs)
 
 
 def test_set_employer_bullets_grows_and_clears_multirun_leftovers(template_path: Path) -> None:
     doc = docx.Document(str(template_path))
     new_bullets = ["Bullet A.", "Bullet B.", "Bullet C.", "Bullet D.", "Bullet E."]
-    resume.set_employer_bullets(doc, "Arteria AI", new_bullets)
+    resume.set_employer_bullets(doc, "Acme Corp", new_bullets)
     doc.save(str(template_path))
 
     doc2 = docx.Document(str(template_path))
-    arteria_idx = next(i for i, p in enumerate(doc2.paragraphs) if "Arteria AI" in p.text)
+    acme_idx = next(i for i, p in enumerate(doc2.paragraphs) if "Acme Corp" in p.text)
     bullets = []
-    i = arteria_idx + 1
+    i = acme_idx + 1
     while i < len(doc2.paragraphs) and doc2.paragraphs[i].style.name == "List Paragraph":
         bullets.append(doc2.paragraphs[i].text)
         i += 1

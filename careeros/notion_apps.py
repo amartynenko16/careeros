@@ -2,7 +2,7 @@
 
 One-way, the opposite direction from notion_sync.py: local SQLite is the
 source of truth for job/application state (that's where `careeros jobs
-save/reject/mark-applied/stage` write), this only pushes outward so Alex can
+save/reject/mark-applied/stage` write), this only pushes outward so you can
 see status in Notion without it becoming a second place edits have to
 happen. Editing a row in Notion does nothing locally; there is no pull path
 back, deliberately, to avoid two sources of truth for the same state.
@@ -16,17 +16,17 @@ Upsert is keyed on jobs.notion_applications_page_id, set locally on first
 push. If that's somehow cleared, a name+CareerOS-Job-ID lookup is used as a
 fallback rather than blindly creating a duplicate row.
 
-**Existing rows are never written to on a push, by agreement with Alex
-(2026-09-03).** A row that already has a Notion page is left completely
-alone -- Alex's workspace is the only thing that edits it from then on. Only
+**Existing rows are never written to on a push, by default.** A row that
+already has a Notion page is left completely alone -- your workspace is the
+only thing that edits it from then on. Only
 jobs with no existing page get a new row created. This replaced an earlier
 design where Job URL/Location/Date Applied/Last Synced refreshed on every
-push; that still risked clobbering something Alex had touched by hand, which
+push; that still risked clobbering something you had touched by hand, which
 Company/Name/Remote Type/Stage were already carved out from (2026-09-02) for
 the same reason. Pass update_existing=True (CLI: --update-existing) to
 explicitly opt into refreshing an existing row's bookkeeping fields (Job
 URL, Location, Date Applied, Last Synced only -- Name/Company/Stage/Remote
-Type still never get touched post-creation); only do this when Alex asks
+Type still never get touched post-creation); only do this when you ask
 for it directly, not as a default behavior.
 """
 
@@ -52,7 +52,7 @@ PROP_REMOTE_TYPE = "Remote Type"
 PROP_DATE_APPLIED = "Date Applied"
 PROP_LAST_SYNCED = "Last Synced"
 
-# Status is NOT written here: Alex converted it to a Notion formula (reads
+# Status is NOT written here: treat it as a Notion formula (reads
 # off Stage, defaults to "Applied" when Stage is empty, confirmed 2026-09-02)
 # after this database was created. It's read-only from the API's perspective;
 # writing to it is silently ignored, so don't bother building a value for it.
@@ -101,14 +101,14 @@ def _date(value: str | None) -> dict[str, Any]:
 
 
 def _notion_display_title(title: str) -> str:
-    """Alex's convention for the Notion Name column (confirmed 2026-09-02):
+    """Naming convention for the Notion Name column:
     just the role title, no company suffix (Company is its own column now),
     with "Senior" shortened to "Sr." Local jobs.title stays the original
     full title unchanged; this is a display-only transform for Notion."""
     return re.sub(r"\bSenior\b", "Sr.", title.strip())
 
 
-# Set once, on page creation, then left alone -- Alex edits these directly
+# Set once, on page creation, then left alone -- you edit these directly
 # in Notion and a later push must not clobber that. Status isn't here at all;
 # it's a formula Notion computes from Stage.
 def _initial_properties(job: dict[str, Any]) -> dict[str, Any]:
@@ -154,7 +154,7 @@ def push(
     Only jobs with no existing page get a new row created. Pass
     update_existing=True to also refresh an existing row's bookkeeping
     fields (Job URL, Location, Date Applied, Last Synced) -- do this only
-    when Alex explicitly asks, not as routine behavior.
+    when you explicitly ask, not as routine behavior.
     """
     token, data_source_id = _require_config()
     client = Client(auth=token)

@@ -36,7 +36,7 @@ def _fixture_page(**overrides: Any) -> dict[str, Any]:
             "Grain": {"type": "select", "select": {"name": "Initiative"}},
             "Employer": {
                 "type": "multi_select",
-                "multi_select": [{"name": "Braze"}],
+                "multi_select": [{"name": "Globex Inc"}],
             },
             "Timeframe": {
                 "type": "rich_text",
@@ -58,7 +58,7 @@ def _fixture_page(**overrides: Any) -> dict[str, Any]:
             },
             "Tech and Tools": {
                 "type": "multi_select",
-                "multi_select": [{"name": "Braze APIs"}, {"name": "Liquid"}],
+                "multi_select": [{"name": "Acme APIs"}, {"name": "Liquid"}],
             },
             "Honesty Tag": {"type": "select", "select": {"name": "Strong"}},
             "Defensible": {"type": "checkbox", "checkbox": True},
@@ -73,14 +73,14 @@ def test_extract_page_full() -> None:
     assert rec["notion_page_id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     assert rec["name"] == "Turned around at-risk enterprise account"
     assert rec["grain"] == "Initiative"
-    assert json.loads(rec["employers_json"]) == ["Braze"]
+    assert json.loads(rec["employers_json"]) == ["Globex Inc"]
     assert rec["timeframe"] == "Q2 2025"
     assert rec["bullet_standard"].startswith("Re-engaged")
     assert rec["bullet_minimal"] is None
     assert rec["bullet_ambitious"] is None
     assert rec["metrics"] == "CSAT: perfect"
     assert rec["notes"] == "Cross-team recovery play."
-    assert json.loads(rec["tech_tools_json"]) == ["Braze APIs", "Liquid"]
+    assert json.loads(rec["tech_tools_json"]) == ["Acme APIs", "Liquid"]
     assert rec["honesty_tag"] == "Strong"
     assert rec["defensible_in_interview"] == 1
 

@@ -55,7 +55,7 @@ ROLE_KEYWORDS: tuple[str, ...] = (
     "forward deployed engineer",
     "forward deployment",         # e.g. "Forward Deployment Strategist" (Maxima) -- same function, different title convention
     "field engineer",
-    # Program roles adjacent to Alex's fit
+    # Program roles adjacent to this role family
     "program manager, customer",
     "customer engineer",
     # CSA and TAM variants
@@ -96,8 +96,8 @@ NEGATIVE_KEYWORDS: tuple[str, ...] = (
     # Sales roles that are pure sales
     "sales director",
     "sales manager",
-    # Executive / too-senior for a 7-year-experience IC search. Alex has been
-    # explicit: no management/leadership roles, IC only.
+    # Executive / too-senior for an individual-contributor search. Excluded
+    # per the user's stated criteria: no management/leadership roles, IC only.
     "chief ",
     "vp,",
     "vp of",
@@ -238,18 +238,31 @@ def resolve_location(location: str, description: str) -> str:
     return extracted or location
 
 
-# Your geo criteria (see CLAUDE.md's "Job search criteria" section): edit this
-# list to your own commute area -- hybrid/onsite roles are only eligible if
-# their location matches one of these terms, and genuinely open remote is
-# handled separately below. Lives here (not in intake.py, where the geo-filter
-# logic originated) because scan.py needs it too (a role-keyword-only filter
-# can't catch US-work-authorization-restricted or hard-onsite-elsewhere
-# roles) and fetchers/base.py is the one shared module both scan.py and
-# intake.py already import from without creating a circular import (intake.py
-# imports _normalize_posted_at from scan.py, so scan.py importing from
-# intake.py would cycle). This is the one copy; intake.py re-exports it.
-TARGET_GEO_AREA = ["toronto", "cambridge", "waterloo", "kitchener", "hamilton", "ancaster", "ontario"]
-OPEN_REMOTE_TERMS = ["global", "worldwide", "anywhere", "canada", "north america"]
+# Your geo criteria live in careeros/local_geo.py (gitignored -- copy from
+# local_geo.example.py and fill in your own commute area). Kept out of this
+# module so the repo never ships anyone's real location. geo_eligible() below
+# uses TARGET_GEO_AREA for hybrid/onsite eligibility and OPEN_REMOTE_TERMS for
+# remote roles that are open regardless of TARGET_GEO_AREA. Logic lives here
+# (not in intake.py, where it originated) because scan.py needs it too (a
+# role-keyword-only filter can't catch US-work-authorization-restricted or
+# hard-onsite-elsewhere roles) and fetchers/base.py is the one shared module
+# both scan.py and intake.py already import from without creating a circular
+# import (intake.py imports _normalize_posted_at from scan.py, so scan.py
+# importing from intake.py would cycle). This is the one copy; intake.py
+# re-exports it.
+try:
+    from careeros.local_geo import OPEN_REMOTE_TERMS, TARGET_GEO_AREA
+except ModuleNotFoundError:
+    import warnings
+
+    warnings.warn(
+        "careeros/local_geo.py not found -- geo filtering will reject every "
+        "hybrid/onsite role until you set it up. Copy careeros/local_geo.example.py "
+        "to careeros/local_geo.py and fill in your own commute area.",
+        stacklevel=2,
+    )
+    TARGET_GEO_AREA = []
+    OPEN_REMOTE_TERMS = ["global", "worldwide", "anywhere"]
 
 # ATS region-tag segments (comma-separated location field, e.g. "Remote,
 # AMER") that mean the company's general Americas remote-hiring region,

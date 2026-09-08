@@ -113,7 +113,7 @@ def test_scan_filters_geo_ineligible(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
     def fake_gh(slug: str) -> list[RawJob]:
         return [
-            # Passes role filter but is onsite outside the Ancaster area: excluded.
+            # Passes role filter but is onsite outside the target geo area: excluded.
             RawJob(ats_id="1", ats_url="https://x/1", title="Solutions Consultant", location="Austin, Texas", remote_type="onsite", description="A", department="CS", updated_at=""),
             # Passes role filter, remote with no region restriction: kept.
             RawJob(ats_id="2", ats_url="https://x/2", title="Solutions Consultant", location="Remote", remote_type="remote", description="B", department="CS", updated_at=""),

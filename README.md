@@ -52,6 +52,9 @@ pip install -e ".[dev]"
 cp CLAUDE.md.example CLAUDE.md
 cp data/facts.example.yaml data/facts.yaml
 cp data/companies.example.yaml data/companies.yaml
+cp data/resume_rules.example.md data/resume_rules.md
+cp data/cover_letter_rules.example.md data/cover_letter_rules.md
+cp careeros/local_geo.example.py careeros/local_geo.py
 cp .env.example .env
 ```
 
@@ -62,6 +65,11 @@ Fill in:
   certifications.
 - `data/companies.yaml` -- your actual target company list. Start small (5-10 companies)
   and expand once the pipeline is working.
+- `careeros/local_geo.py` -- your commute area and open-remote terms, used by the geo
+  eligibility filter (`careeros/fetchers/base.py`). Without this, hybrid/onsite roles are
+  rejected by default and you'll see a warning at import time.
+- `data/resume_rules.md` / `data/cover_letter_rules.md` -- start from the templates and add
+  your own "accuracy traps" checklist as you find things an assistant keeps getting wrong.
 
 **3. Set up Notion** (this is the fiddly part -- take it slowly):
 

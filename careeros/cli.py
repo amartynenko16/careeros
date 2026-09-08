@@ -15,7 +15,7 @@ Command layout:
     careeros jobs save <id>         Mark job saved.
     careeros jobs reject <id>       Mark job rejected.
     careeros jobs mark-applied <id> Mark job applied.
-    careeros jobs add <url>         Add a role Alex found himself (Ashby/Greenhouse/Lever URL).
+    careeros jobs add <url>         Add a role you found yourself (Ashby/Greenhouse/Lever URL).
     careeros jobs stage <id> <stage>  Set post-application pipeline stage.
     careeros notion-sync-applications  Push saved/applied jobs to Notion 📋 Applications DB.
     careeros coach analyze <id>     Match Bank records against a job's description.
@@ -69,7 +69,7 @@ def _notify_macos_scan_complete(summary: "scan.ScanSummary") -> None:
     Always fires (not just when new jobs are found) -- this is the only
     signal that the scheduled scan ran at all, since it's a plain
     Python/bash process with no Claude Code involved to otherwise tell
-    Alex anything happened. Message content still varies: a specific
+    you anything happened. Message content still varies: a specific
     "N new role(s) at X, Y" when there's something to look at, a plain
     "0 new roles" heartbeat otherwise.
 
@@ -256,7 +256,7 @@ def notion_sync_applications_cmd(
         "--update-existing",
         help="Also refresh bookkeeping fields (URL/Location/Date Applied/Last Synced) on rows "
         "that already exist in Notion. Default: existing rows are left completely untouched, "
-        "only new rows get created -- Alex's own edits in Notion are the only thing that "
+        "only new rows get created -- your own edits in Notion are the only thing that "
         "changes an existing row. Only pass this when he explicitly asks for a refresh.",
     ),
 ) -> None:
@@ -514,7 +514,7 @@ def jobs_add(
     location: str = typer.Option("", "--location", help="Location text, for --description-file."),
     remote_type: str = typer.Option("unknown", "--remote-type", help="remote / hybrid / onsite / unknown."),
 ) -> None:
-    """Add a role Alex found himself, outside a scan. Either a URL from a
+    """Add a role you found yourself, outside a scan. Either a URL from a
     supported ATS, or --company/--title/--description-file for anything else.
     Runs the same role/geo filters as a scan and stores the result either way."""
     _require_db()

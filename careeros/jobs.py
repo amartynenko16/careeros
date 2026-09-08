@@ -14,7 +14,7 @@ from careeros import db
 VALID_STATUSES = {"new", "saved", "rejected", "applied"}
 
 # Post-application pipeline stages, distinct from VALID_STATUSES: status
-# tracks CareerOS's own triage (did Alex decide to apply), stage tracks what
+# tracks CareerOS's own triage (did you decide to apply), stage tracks what
 # happened after -- only meaningful once status='applied'. No "Applied" stage
 # value: Notion's Status is now a formula read off Stage, defaulting to
 # "Applied" whenever Stage is empty, so an applied-with-no-stage-set row is
@@ -119,7 +119,7 @@ def set_status(job_id: str, status: str) -> None:
 
 def set_application_stage(job_id: str, stage: str) -> None:
     """Update a job's post-application pipeline stage. Does not require
-    status='applied' (Alex might record a stage slightly out of order), but
+    status='applied' (you might record a stage slightly out of order), but
     the stage value itself must be one of VALID_STAGES."""
     if stage not in VALID_STAGES:
         raise InvalidStageError(
