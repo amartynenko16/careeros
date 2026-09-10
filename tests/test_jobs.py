@@ -82,6 +82,30 @@ def test_set_score_missing_job_raises(tmp_path: Path, monkeypatch: pytest.Monkey
         jobs.set_score("greenhouse::does-not-exist", 50)
 
 
+def test_set_notes_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+    _insert_job()
+
+    jobs.set_notes("greenhouse::123", "Recruiter screen done, strong signal.")
+
+    assert jobs.get("greenhouse::123")["notes"] == "Recruiter screen done, strong signal."
+
+
+def test_set_notes_rejects_over_200_chars(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+    _insert_job()
+
+    with pytest.raises(ValueError):
+        jobs.set_notes("greenhouse::123", "x" * 201)
+
+
+def test_set_notes_missing_job_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+
+    with pytest.raises(jobs.JobNotFoundError):
+        jobs.set_notes("greenhouse::does-not-exist", "note")
+
+
 def test_set_comp_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_db(tmp_path, monkeypatch)
     _insert_job()

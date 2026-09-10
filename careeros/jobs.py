@@ -192,6 +192,26 @@ def set_score(job_id: str, score: int, breakdown: dict | None = None) -> None:
         conn.commit()
 
 
+NOTES_MAX_CHARS = 200
+
+
+def set_notes(job_id: str, notes: str) -> None:
+    """Set a job's qualitative notes: a concise, skimmable read on the
+    opportunity beyond the fit score (process status, warm contacts,
+    identified gaps, culture signals). Capped at NOTES_MAX_CHARS so it
+    stays a glance-able column, not a second description field."""
+    if len(notes) > NOTES_MAX_CHARS:
+        raise ValueError(f"notes is {len(notes)} chars, max is {NOTES_MAX_CHARS}")
+    with db.connect() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET notes = ? WHERE id = ?",
+            (notes, job_id),
+        )
+        if cur.rowcount == 0:
+            raise JobNotFoundError(f"No job with id '{job_id}'.")
+        conn.commit()
+
+
 def clear_new() -> int:
     """Delete all jobs with status='new'. Preserves saved / rejected / applied.
 

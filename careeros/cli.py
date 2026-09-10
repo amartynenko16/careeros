@@ -498,6 +498,20 @@ def jobs_set_comp(job_id: str, comp: str) -> None:
     console.print(f"[green]Comp set[/green] {job_id} -> {comp}")
 
 
+@jobs_app.command("set-notes")
+def jobs_set_notes(job_id: str, notes: str) -> None:
+    """Set a job's qualitative notes (max 200 chars): a concise read on the
+    opportunity beyond the fit score -- process status, warm contacts,
+    identified gaps, culture signals."""
+    _require_db()
+    try:
+        jobs.set_notes(job_id, notes)
+    except (jobs.JobNotFoundError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Notes set[/green] {job_id} -> {notes}")
+
+
 @jobs_app.command("score")
 def jobs_compute_score(job_id: str) -> None:
     """Compute and set a job's initial fit score deterministically (Bank

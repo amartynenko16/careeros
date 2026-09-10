@@ -51,6 +51,7 @@ PROP_LOCATION = "Location"
 PROP_REMOTE_TYPE = "Remote Type"
 PROP_COMP = "Comp"
 PROP_FIT_SCORE = "Fit Score"
+PROP_NOTES = "Notes"
 PROP_DATE_APPLIED = "Date Applied"
 PROP_LAST_SYNCED = "Last Synced"
 
@@ -125,6 +126,7 @@ def _initial_properties(job: dict[str, Any]) -> dict[str, Any]:
         PROP_REMOTE_TYPE: _select(_REMOTE_LABELS.get(job.get("remote_type", ""), "Unknown")),
         PROP_COMP: _rich_text(job.get("comp") or ""),
         PROP_FIT_SCORE: _number(job.get("score")),
+        PROP_NOTES: _rich_text(job.get("notes") or ""),
     }
 
 
