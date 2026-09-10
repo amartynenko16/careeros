@@ -482,6 +482,22 @@ def jobs_set_remote_type(job_id: str, remote_type: str) -> None:
     console.print(f"[green]Remote type set[/green] {job_id} -> {remote_type}")
 
 
+@jobs_app.command("set-comp")
+def jobs_set_comp(job_id: str, comp: str) -> None:
+    """Set a job's disclosed compensation, exactly as the JD states it.
+
+    Never a researched or estimated figure -- leave it unset if the posting
+    doesn't disclose a number. Persists locally, so it survives the next
+    notion-sync-applications push."""
+    _require_db()
+    try:
+        jobs.set_comp(job_id, comp)
+    except jobs.JobNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Comp set[/green] {job_id} -> {comp}")
+
+
 @jobs_app.command("clear")
 def jobs_clear(
     confirm: bool = typer.Option(

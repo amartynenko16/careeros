@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     title             TEXT,
     location          TEXT,
     remote_type       TEXT,               -- remote, hybrid, onsite, unknown
+    comp              TEXT,               -- compensation as disclosed in the JD only, never estimated; blank if undisclosed
     description       TEXT,
     posted_at         TEXT,               -- ATS-reported posting/update date, normalized to ISO 8601 UTC
     fetched_at        TEXT,
@@ -138,6 +139,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "date_applied",
         "notion_applications_page_id",
         "notion_last_synced_at",
+        "comp",
     ):
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT")

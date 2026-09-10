@@ -154,6 +154,21 @@ def set_remote_type(job_id: str, remote_type: str) -> None:
         conn.commit()
 
 
+def set_comp(job_id: str, comp: str) -> None:
+    """Set a job's disclosed compensation. Only ever what the JD itself
+    states (a range, a base figure, whatever form it took) -- never a
+    researched or estimated figure. Persists locally so it survives the
+    next notion-sync-applications push."""
+    with db.connect() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET comp = ? WHERE id = ?",
+            (comp, job_id),
+        )
+        if cur.rowcount == 0:
+            raise JobNotFoundError(f"No job with id '{job_id}'.")
+        conn.commit()
+
+
 def clear_new() -> int:
     """Delete all jobs with status='new'. Preserves saved / rejected / applied.
 

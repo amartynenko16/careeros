@@ -49,6 +49,7 @@ PROP_STAGE = "Stage"
 PROP_URL = "Job URL"
 PROP_LOCATION = "Location"
 PROP_REMOTE_TYPE = "Remote Type"
+PROP_COMP = "Comp"
 PROP_DATE_APPLIED = "Date Applied"
 PROP_LAST_SYNCED = "Last Synced"
 
@@ -117,6 +118,7 @@ def _initial_properties(job: dict[str, Any]) -> dict[str, Any]:
         PROP_COMPANY: _rich_text(_company_display_name(job["company_slug"])),
         PROP_STAGE: _select(job.get("application_stage") or None),
         PROP_REMOTE_TYPE: _select(_REMOTE_LABELS.get(job.get("remote_type", ""), "Unknown")),
+        PROP_COMP: _rich_text(job.get("comp") or ""),
     }
 
 

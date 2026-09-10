@@ -55,6 +55,22 @@ def test_set_remote_type_missing_job_raises(tmp_path: Path, monkeypatch: pytest.
         jobs.set_remote_type("greenhouse::does-not-exist", "remote")
 
 
+def test_set_comp_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+    _insert_job()
+
+    jobs.set_comp("greenhouse::123", "$150K-$180K CAD base")
+
+    assert jobs.get("greenhouse::123")["comp"] == "$150K-$180K CAD base"
+
+
+def test_set_comp_missing_job_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+
+    with pytest.raises(jobs.JobNotFoundError):
+        jobs.set_comp("greenhouse::does-not-exist", "$150K")
+
+
 def test_set_application_stage_accepts_numbered_scheme(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_db(tmp_path, monkeypatch)
     _insert_job()
