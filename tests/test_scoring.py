@@ -57,13 +57,17 @@ def _insert_bank_record(name: str, tech_tools: list[str], honesty_tag: str) -> N
 @pytest.mark.parametrize(
     "comp,expected_k",
     [
-        ("Posted: $94-151K base ($126-189K OTE) / Landed: $118K base", 118),
-        ("Post: $89-120K base ($111-150K OTE) / Landed: $110-120K base ($137-150K OTE)", 120),
-        ("Posted: $118-158K base (OTE unconfirmed) / Landed: $130-140K base", 140),
+        # Current format: landed leads unlabeled, "- Posted:" trails.
+        ("$118K base - Posted: $94-151K base ($126-189K OTE)", 118),
+        ("$110-120K base ($137-150K OTE) - Posted: $89-120K base ($111-150K OTE)", 120),
+        ("$130-140K base - Posted: $118-158K base (OTE unconfirmed)", 140),
         ("Posted: Base unconfirmed ($160-220K OTE)", None),
         ("N/A", None),
         (None, None),
         ("Posted: $162-166K base (186-190K OTE)", 166),
+        # Older labeled format still parses.
+        ("Posted: $94-151K base ($126-189K OTE) / Landed: $118K base", 118),
+        ("Post: $89-120K base ($111-150K OTE) / Landed: $110-120K base ($137-150K OTE)", 120),
     ],
 )
 def test_highest_base_figure_parsing(comp: str | None, expected_k: int | None) -> None:

@@ -98,28 +98,49 @@ def _bank_match_component(job_id: str) -> tuple[int, str]:
     return points, label
 
 
+def _base_figure_from_segment(segment: str) -> int | None:
+    if "unconfirmed" in segment.lower():
+        return None
+    # Only the part before any parenthetical (OTE/bonus), so a base range
+    # isn't confused with a higher OTE range in the same segment.
+    base_part = re.split(r"\(", segment)[0]
+    fig = _COMP_FIGURE_RE.search(base_part)
+    if not fig:
+        return None
+    high = fig.group(2) or fig.group(1)
+    return int(high.replace(",", ""))
+
+
 def _highest_base_figure_k(comp: str) -> int | None:
     """Pull the highest base-salary figure (in thousands) out of a Comp
-    string, preferring a 'Landed' figure over 'Posted' since it's the more
-    concrete number. Ignores OTE/bonus figures and anything after 'Base
-    unconfirmed'. Returns None if nothing parseable."""
+    string, preferring a landed figure over a posted one since it's the
+    more concrete number. Ignores OTE/bonus figures and anything marked
+    unconfirmed. Returns None if nothing parseable.
+
+    Format: "<landed> - Posted: <posted>" when both are known (the landed
+    figure leads, no label), or just "Posted: <posted>" when there's no
+    landed figure yet. Older "Posted: ... / Landed: ..." text (labeled,
+    posted-first) is also still accepted."""
     if not comp or comp.strip().upper() == "N/A":
         return None
 
+    # Current format: landed figure (if any) leads, unlabeled, before " - Posted:".
+    m = re.split(r"\s*-\s*Posted:", comp, maxsplit=1, flags=re.IGNORECASE)
+    if len(m) == 2:
+        landed_part, posted_part = m
+        fig = _base_figure_from_segment(landed_part)
+        if fig is not None:
+            return fig
+        return _base_figure_from_segment(posted_part)
+
+    # Older labeled format, or posted-only with no landed figure at all.
     for label in ("Landed", "Posted", "Post"):
-        m = re.search(rf"{label}:\s*(.*?)(?:/|$)", comp, re.IGNORECASE)
-        if not m:
+        lm = re.search(rf"{label}:\s*(.*?)(?:/|$)", comp, re.IGNORECASE)
+        if not lm:
             continue
-        segment = m.group(1)
-        if "unconfirmed" in segment.lower():
-            continue
-        # Only the part before any parenthetical (OTE/bonus), so a base
-        # range isn't confused with a higher OTE range in the same segment.
-        base_part = re.split(r"\(", segment)[0]
-        fig = _COMP_FIGURE_RE.search(base_part)
-        if fig:
-            high = fig.group(2) or fig.group(1)
-            return int(high.replace(",", ""))
+        fig = _base_figure_from_segment(lm.group(1))
+        if fig is not None:
+            return fig
     return None
 
 
