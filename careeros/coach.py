@@ -15,6 +15,7 @@ actually means is left to you.
 """
 
 import json
+import re
 from typing import Any
 
 from careeros import db, jobs
@@ -25,6 +26,36 @@ NEVER_CLAIM = "Never Claim"
 # Display order for grouping matched records. Untagged records (no honesty
 # tag set at all) sort last, after Gap.
 HONESTY_DISPLAY_ORDER = ["Strong", "Working", "Gap", "Untagged"]
+
+# Cache compiled patterns per term -- analyze() re-checks every term against
+# every job, so this avoids recompiling the same regex on every call.
+_TERM_PATTERN_CACHE: dict[str, re.Pattern] = {}
+
+
+def _term_pattern(term: str) -> re.Pattern:
+    """A word-boundary regex for `term` with its trailing 's' made optional,
+    so "REST APIs" (the Bank's stored plural form) also matches a JD that
+    says "REST API" (singular) -- found 2026-09-10 undercounting a real
+    match: AfterShip's JD said "REST API expertise" and scored a flat 0
+    Bank-match points despite Alex's REST APIs record being Strong-tagged,
+    because `"rest apis" in description` is a strict substring check with
+    no singular/plural awareness.
+
+    Only terms longer than 3 chars get the trailing 's' stripped before the
+    optional-s is added back (`\\bterm s?\\b`) -- short all-caps acronyms
+    that happen to end in 's' (AWS, at 3 chars) are left untouched rather
+    than stripped to a 2-char fragment like "AW", which would risk matching
+    inside unrelated words even with a word boundary. Word boundaries also
+    fix a smaller latent issue: the old substring check could match inside
+    a longer unrelated word, not just miss singular/plural variants.
+    """
+    cached = _TERM_PATTERN_CACHE.get(term)
+    if cached is not None:
+        return cached
+    base = term[:-1] if term.endswith("s") and len(term) > 3 else term
+    pattern = re.compile(rf"\b{re.escape(base)}s?\b", re.IGNORECASE)
+    _TERM_PATTERN_CACHE[term] = pattern
+    return pattern
 
 
 def _effective_honesty(rec: dict) -> str | None:
@@ -55,7 +86,7 @@ def analyze(job_id: str) -> dict[str, Any]:
             don't appear anywhere in this job's description text.
     """
     job = jobs.get(job_id)
-    description = (job.get("description") or "").lower()
+    description = job.get("description") or ""
 
     with db.connect() as conn:
         rows = conn.execute("SELECT * FROM bank_records").fetchall()
@@ -73,7 +104,7 @@ def analyze(job_id: str) -> dict[str, Any]:
         terms = _tech_terms(rec)
         all_bank_terms.update(terms)
 
-        matched = [t for t in terms if t.lower() in description]
+        matched = [t for t in terms if _term_pattern(t).search(description)]
         if matched:
             matched_terms_overall.update(matched)
             matches.setdefault(tag or "Untagged", []).append(

@@ -304,6 +304,40 @@ def notion_pull_applications_cmd() -> None:
             console.print(f"  - {s}")
 
 
+@app.command("notion-push-score")
+def notion_push_score_cmd(job_id: str) -> None:
+    """Push a job's current local Fit Score to its existing Notion row.
+    Fit Score is write-once on page creation for every other path (it's
+    an _initial_properties field), so an existing row needs this explicit
+    push after `careeros jobs score` or `jobs set-score` changes it."""
+    _require_db()
+    try:
+        ok = notion_apps.push_score(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet, or no score set.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Fit Score pushed[/green] {job_id}")
+
+
+@app.command("notion-push-notes")
+def notion_push_notes_cmd(job_id: str) -> None:
+    """Push a job's current local Notes to its existing Notion row. Same
+    write-once-on-creation situation as Fit Score."""
+    _require_db()
+    try:
+        ok = notion_apps.push_notes(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Notes pushed[/green] {job_id}")
+
+
 # --- vet ---------------------------------------------------------------------
 
 @app.command("vet")

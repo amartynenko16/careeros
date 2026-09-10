@@ -106,6 +106,73 @@ def test_unmatched_bank_tools_excludes_matched_and_never_claim(
     assert report["unmatched_bank_tools"] == ["Terraform"]
 
 
+def test_analyze_matches_singular_when_bank_term_is_plural(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Real bug found 2026-09-10: AfterShip's JD said "REST API expertise"
+    # (singular) but the Bank's stored term is "REST APIs" (plural), and a
+    # strict substring check silently missed it, scoring a Strong record as
+    # zero Bank match despite the text being right there.
+    _isolate(tmp_path, monkeypatch)
+    db.init_db()
+
+    _insert_record("p1", "REST APIs and Integration Architecture", ["REST APIs"], honesty_tag="Strong")
+    _insert_job("acme::1", "Role", "ERP and REST API expertise advantageous.")
+
+    report = coach.analyze("acme::1")
+    assert "Strong" in report["matches"]
+    assert report["matches"]["Strong"][0]["matched_terms"] == ["REST APIs"]
+
+
+def test_analyze_matches_plural_when_bank_term_is_singular(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _isolate(tmp_path, monkeypatch)
+    db.init_db()
+
+    _insert_record("p1", "Webhook handling", ["Webhook"], honesty_tag="Strong")
+    _insert_job("acme::1", "Role", "You'll configure webhooks for every customer.")
+
+    report = coach.analyze("acme::1")
+    assert "Strong" in report["matches"]
+
+
+def test_analyze_short_acronym_ending_in_s_not_over_stripped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # "AWS" must not get stripped to the 2-char fragment "AW" (which could
+    # false-positive inside unrelated words even with a word boundary).
+    _isolate(tmp_path, monkeypatch)
+    db.init_db()
+
+    _insert_record("p1", "Cloud storage", ["AWS"], honesty_tag="Working")
+    _insert_job("acme::1", "Role", "Big data and analytics platform, no AWS experience needed.")
+
+    report = coach.analyze("acme::1")
+    # Real "AWS" mention still matches...
+    assert "Working" in report["matches"]
+
+    _insert_job("acme::2", "Role2", "We help you draw insights and see the bigger picture.")
+    report2 = coach.analyze("acme::2")
+    # ...but "aw"-containing words like "draw" must not false-positive.
+    assert "Working" not in report2["matches"]
+
+
+def test_analyze_no_partial_word_false_positive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Word-boundary matching: "SQL" must not match inside an unrelated
+    # longer token.
+    _isolate(tmp_path, monkeypatch)
+    db.init_db()
+
+    _insert_record("p1", "Database work", ["SQL"], honesty_tag="Strong")
+    _insert_job("acme::1", "Role", "We use NoSQLDB for everything, no relational database here.")
+
+    report = coach.analyze("acme::1")
+    assert "Strong" not in report["matches"]
+
+
 def test_compare_sorts_by_strong_matches_then_total(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

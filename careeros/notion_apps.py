@@ -271,6 +271,28 @@ def push_score(job_id: str) -> bool:
     return True
 
 
+def push_notes(job_id: str) -> bool:
+    """Push a job's current local Notes to its existing Notion row. Notes is
+    an _initial_properties field (write-once on creation), same as Fit
+    Score, so a later change needs this explicit push rather than the
+    generic push() pipeline. Returns False if the job has no Notion page
+    yet (run push() first in that case) -- unlike push_score(), a blank
+    Notes value IS pushed (clearing it is a valid intentional edit)."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT notes, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_NOTES: _rich_text(row["notes"] or "")},
+    )
+    return True
+
+
 def _find_existing_page(client: Client, data_source_id: str, job_id: str) -> str | None:
     """Fallback lookup by CareerOS Job ID, for when a job's stored
     notion_applications_page_id is missing (first push, or was cleared)."""
