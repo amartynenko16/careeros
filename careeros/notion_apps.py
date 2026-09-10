@@ -59,7 +59,8 @@ PROP_LAST_SYNCED = "Last Synced"
 # off Stage, defaults to "Applied" when Stage is empty, confirmed 2026-09-02)
 # after this database was created. It's read-only from the API's perspective;
 # writing to it is silently ignored, so don't bother building a value for it.
-_REMOTE_LABELS = {"remote": "Remote", "hybrid": "Hybrid", "onsite": "Onsite"}
+_REMOTE_LABELS = {"remote": "Remote", "hybrid": "Hybrid", "onsite": "On-Site"}
+_REMOTE_LABELS_INVERSE = {v: k for k, v in _REMOTE_LABELS.items()}
 
 
 class NotionAppsConfigError(RuntimeError):
@@ -163,16 +164,23 @@ def _rich_text_value(prop: dict[str, Any] | None) -> str:
 
 
 def pull_editable_fields() -> PullSummary:
-    """Pull Stage and Comp from Notion into local SQLite -- the two fields
-    you hand-edit directly in the Applications table. This is the one
-    deliberate exception to push()'s one-way design: the only path where
-    Notion overrides local state, and only for these two fields (never
-    Name/Company/Remote Type/anything else -- those still flow local ->
-    Notion only). Run this before recomputing Fit Score, or scoring works
-    off stale local data.
+    """Pull Stage, Comp, and Remote Type from Notion into local SQLite --
+    the three fields you hand-edit directly in the Applications table
+    (Remote Type via `careeros jobs set-remote-type` originally, but a
+    correction made straight in Notion has the exact same drift problem as
+    Stage/Comp and needs the same pull). This is the one deliberate
+    exception to push()'s one-way design: the only path where Notion
+    overrides local state, and only for these three fields (never
+    Name/Company/anything else -- those still flow local -> Notion only).
+    Run this before recomputing Fit Score, or scoring works off stale
+    local data -- remote_type feeds the score's remote-preference
+    component directly.
 
     A blank value in Notion never overwrites a non-blank local value --
-    only an actual edit (a real Stage selection, real Comp text) pulls.
+    only an actual edit (a real Stage/Remote Type selection, real Comp
+    text) pulls. "Unknown" is Remote Type's blank state, so it's treated
+    the same as blank here -- it never overwrites a local value that's
+    already more specific.
     """
     from careeros import jobs as jobs_module
 
@@ -196,7 +204,7 @@ def pull_editable_fields() -> PullSummary:
 
             with db.connect() as conn:
                 existing = conn.execute(
-                    "SELECT application_stage, comp FROM jobs WHERE id = ?", (job_id,)
+                    "SELECT application_stage, comp, remote_type FROM jobs WHERE id = ?", (job_id,)
                 ).fetchone()
             if existing is None:
                 summary.skipped.append(f"{job_id}: no matching local job")
@@ -204,6 +212,8 @@ def pull_editable_fields() -> PullSummary:
 
             stage = _select_value(props.get(PROP_STAGE))
             comp = _rich_text_value(props.get(PROP_COMP)).strip()
+            remote_label = _select_value(props.get(PROP_REMOTE_TYPE))
+            remote_type = _REMOTE_LABELS_INVERSE.get(remote_label) if remote_label else None
 
             changed = False
             if stage and stage != existing["application_stage"]:
@@ -214,6 +224,8 @@ def pull_editable_fields() -> PullSummary:
                     changed = True
             if comp and comp != (existing["comp"] or ""):
                 changed = True
+            if remote_type and remote_type != existing["remote_type"]:
+                changed = True
 
             if not changed:
                 summary.unchanged += 1
@@ -223,9 +235,10 @@ def pull_editable_fields() -> PullSummary:
                 conn.execute(
                     "UPDATE jobs SET "
                     "application_stage = COALESCE(?, application_stage), "
-                    "comp = CASE WHEN ? != '' THEN ? ELSE comp END "
+                    "comp = CASE WHEN ? != '' THEN ? ELSE comp END, "
+                    "remote_type = COALESCE(?, remote_type) "
                     "WHERE id = ?",
-                    (stage, comp, comp, job_id),
+                    (stage, comp, comp, remote_type, job_id),
                 )
                 conn.commit()
             summary.updated += 1
