@@ -45,11 +45,11 @@ except ModuleNotFoundError:
 
 # --- component weights (sum to 100) -----------------------------------------
 
-BANK_MATCH_MAX = 25
-STRONG_MATCH_POINTS = 4
-STRONG_MATCH_CAP = 18
+BANK_MATCH_MAX = 20
+STRONG_MATCH_POINTS = 3
+STRONG_MATCH_CAP = 14
 WORKING_MATCH_POINTS = 2
-WORKING_MATCH_CAP = 7
+WORKING_MATCH_CAP = 6
 
 COMP_MAX = 20
 COMP_WELL_ABOVE_FLOOR = 20    # >= floor + ~15%
@@ -58,9 +58,9 @@ COMP_BELOW_FLOOR_CLOSE = 8    # within ~15% under floor
 COMP_WELL_BELOW_FLOOR = 3
 COMP_UNKNOWN = 10             # undisclosed / unconfirmed -- neutral, not penalized
 
-REMOTE_MAX = 15
-REMOTE_POINTS = {"remote": 15, "hybrid": 10, "onsite": 5}
-REMOTE_DEFAULT = 8
+REMOTE_MAX = 20
+REMOTE_POINTS = {"remote": 20, "hybrid": 5, "onsite": 0}
+REMOTE_DEFAULT = 0
 
 LANDING_MAX = 40
 STAGE_LIKELIHOOD = {
