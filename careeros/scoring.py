@@ -1,45 +1,86 @@
-"""Deterministic fit score (0-100) for the Applications tracker.
+"""Live Fit Score (0-100) for the Applications tracker.
 
 Same philosophy as the rest of CareerOS (see CLAUDE.md decision #4): rules
 over your own stored data, no LLM judgment call baked into the number. The
-initial score is computed once from what's already known about a job
-(Bank tech/tool match via coach.py, company tier, comp disclosure, geo
-openness, warm-contact signal). After that, it's a live field -- meant to
-move as interview feedback and progression come in, which isn't
-deterministic (a good phone screen isn't a fact CareerOS can observe), so
-that part is a manual update via jobs.set_score(), same pattern as Stage
-and Comp.
+score blends four things that together answer "where should my time go":
 
-Weights are named constants below specifically so they're easy to retune
-without hunting through the scoring logic.
+  1. Bank/role match     -- do you actually have the experience for this?
+  2. Comp attractiveness -- is it worth it, against your own floor?
+  3. Remote preference    -- flexibility, independent of geo eligibility
+     (geo_eligible() already filtered out anything you couldn't take)
+  4. Landing likelihood  -- real momentum: interview stage progress, plus
+     a warm-contact bonus
+
+Company tier isn't a separate component here (a tier is "should I bother
+applying," which is already decided by the time a job has a score at all
+-- scoring an application shouldn't re-litigate the target list).
+
+compute_initial_score() is the deterministic baseline. It's a starting
+point, not the final word: interview context (a hiring manager's tone, a
+warm contact's read on the room, a recruiter going quiet) isn't something
+CareerOS can observe, so layer that in by hand via jobs.set_score() with
+your own adjusted number and a short describe_score()-style note, the same
+way describe_score() would phrase it. Weights are named constants
+specifically so they're easy to retune.
 """
 
+import re
 from typing import Any
 
 from careeros import coach, db
 
+try:
+    from careeros.local_criteria import COMP_FLOOR
+except ModuleNotFoundError:
+    import warnings
+
+    warnings.warn(
+        "careeros/local_criteria.py not found -- comp-attractiveness scoring "
+        "will treat every disclosed figure as neutral. Copy "
+        "careeros/local_criteria.example.py to careeros/local_criteria.py "
+        "and fill in your own comp floor.",
+        stacklevel=2,
+    )
+    COMP_FLOOR = None
+
 # --- component weights (sum to 100) -----------------------------------------
 
-BANK_MATCH_MAX = 40          # Bank tech/tool overlap with the JD (coach.py)
-STRONG_MATCH_POINTS = 6      # per Strong-tagged record matched, capped below
-STRONG_MATCH_CAP = 28
-WORKING_MATCH_POINTS = 3     # per Working-tagged record matched, capped below
-WORKING_MATCH_CAP = 12
+BANK_MATCH_MAX = 25
+STRONG_MATCH_POINTS = 4
+STRONG_MATCH_CAP = 18
+WORKING_MATCH_POINTS = 2
+WORKING_MATCH_CAP = 7
 
-COMPANY_TIER_MAX = 20
-TIER_POINTS = {1: 20, 2: 12, 3: 6}
-TIER_DEFAULT = 6             # untiered / manually-added companies
+COMP_MAX = 20
+COMP_WELL_ABOVE_FLOOR = 20    # >= floor + ~15%
+COMP_AT_FLOOR = 15            # >= floor
+COMP_BELOW_FLOOR_CLOSE = 8    # within ~15% under floor
+COMP_WELL_BELOW_FLOOR = 3
+COMP_UNKNOWN = 10             # undisclosed / unconfirmed -- neutral, not penalized
 
-COMP_TRANSPARENCY_MAX = 15
-COMP_DISCLOSED_POINTS = 15
-COMP_UNDISCLOSED_POINTS = 8
+REMOTE_MAX = 15
+REMOTE_POINTS = {"remote": 15, "hybrid": 10, "onsite": 5}
+REMOTE_DEFAULT = 8
 
-GEO_MAX = 15
-GEO_OPEN_POINTS = 15         # genuinely open remote, or in your target area
-GEO_REGION_TAG_POINTS = 10   # open via a broad ATS region tag (e.g. "AMER")
-GEO_BASELINE_POINTS = 8      # passed geo_eligible() some other way
+LANDING_MAX = 40
+STAGE_LIKELIHOOD = {
+    None: 10,
+    "": 10,
+    "1. Phone Screen": 15,
+    "2. First Round Interview": 20,
+    "2.5. Follow-Up Email": 18,
+    "3. Second Round Interview": 27,
+    "3.5. Follow-Up Email": 24,
+    "4. Final Round": 33,
+    "4.5. Follow-Up Email": 30,
+    "5. Offer": 40,
+    "Rejected by Company": 0,
+    "Withdrawn": 0,
+}
+WARM_CONTACT_BONUS = 5
 
-WARM_CONTACT_MAX = 10
+# A number, optionally a range, in $ or bare, followed by "K" (case-insensitive).
+_COMP_FIGURE_RE = re.compile(r"\$?\s*([\d,]+)\s*(?:-\s*\$?\s*([\d,]+))?\s*K", re.IGNORECASE)
 
 
 def _bank_match_component(job_id: str) -> tuple[int, str]:
@@ -48,72 +89,126 @@ def _bank_match_component(job_id: str) -> tuple[int, str]:
     strong = min(counts.get("Strong", 0) * STRONG_MATCH_POINTS, STRONG_MATCH_CAP)
     working = min(counts.get("Working", 0) * WORKING_MATCH_POINTS, WORKING_MATCH_CAP)
     points = min(strong + working, BANK_MATCH_MAX)
-    reason = f"{counts.get('Strong', 0)} Strong + {counts.get('Working', 0)} Working Bank records matched the JD"
-    return points, reason
+    if points >= BANK_MATCH_MAX * 0.7:
+        label = "strong Bank match"
+    elif points >= BANK_MATCH_MAX * 0.3:
+        label = "partial Bank match"
+    else:
+        label = "weak Bank match"
+    return points, label
 
 
-def _company_tier_component(company_slug: str) -> tuple[int, str]:
-    with db.connect() as conn:
-        row = conn.execute("SELECT tier, notes FROM companies WHERE slug = ?", (company_slug,)).fetchone()
-    tier = row["tier"] if row else None
-    points = TIER_POINTS.get(tier, TIER_DEFAULT)
-    reason = f"tier {tier}" if tier else "untiered company"
-    return points, reason
+def _highest_base_figure_k(comp: str) -> int | None:
+    """Pull the highest base-salary figure (in thousands) out of a Comp
+    string, preferring a 'Landed' figure over 'Posted' since it's the more
+    concrete number. Ignores OTE/bonus figures and anything after 'Base
+    unconfirmed'. Returns None if nothing parseable."""
+    if not comp or comp.strip().upper() == "N/A":
+        return None
+
+    for label in ("Landed", "Posted", "Post"):
+        m = re.search(rf"{label}:\s*(.*?)(?:/|$)", comp, re.IGNORECASE)
+        if not m:
+            continue
+        segment = m.group(1)
+        if "unconfirmed" in segment.lower():
+            continue
+        # Only the part before any parenthetical (OTE/bonus), so a base
+        # range isn't confused with a higher OTE range in the same segment.
+        base_part = re.split(r"\(", segment)[0]
+        fig = _COMP_FIGURE_RE.search(base_part)
+        if fig:
+            high = fig.group(2) or fig.group(1)
+            return int(high.replace(",", ""))
+    return None
 
 
 def _comp_component(comp: str | None) -> tuple[int, str]:
-    if comp and comp.strip().upper() != "N/A":
-        return COMP_DISCLOSED_POINTS, "comp disclosed in JD"
-    return COMP_UNDISCLOSED_POINTS, "comp not disclosed (neutral)"
+    if COMP_FLOOR is None:
+        return COMP_UNKNOWN, "comp floor not configured"
+
+    figure_k = _highest_base_figure_k(comp or "")
+    if figure_k is None:
+        return COMP_UNKNOWN, "comp undisclosed/unconfirmed"
+
+    floor_k = COMP_FLOOR / 1000
+    if figure_k >= floor_k * 1.15:
+        return COMP_WELL_ABOVE_FLOOR, f"${figure_k:.0f}K well above floor"
+    if figure_k >= floor_k:
+        return COMP_AT_FLOOR, f"${figure_k:.0f}K at/above floor"
+    if figure_k >= floor_k * 0.85:
+        return COMP_BELOW_FLOOR_CLOSE, f"${figure_k:.0f}K close to floor"
+    return COMP_WELL_BELOW_FLOOR, f"${figure_k:.0f}K well below floor"
 
 
-def _geo_component(location: str, remote_type: str) -> tuple[int, str]:
-    from careeros.fetchers.base import OPEN_REMOTE_TERMS, TARGET_GEO_AREA
-
-    loc = (location or "").lower()
-    if remote_type == "remote" and any(t in loc for t in OPEN_REMOTE_TERMS):
-        return GEO_OPEN_POINTS, "genuinely open remote"
-    if remote_type in ("onsite", "hybrid") and any(t in loc for t in TARGET_GEO_AREA):
-        return GEO_OPEN_POINTS, "in target commute area"
-    if any(seg.strip() in ("amer", "americas") for seg in loc.split(",")):
-        return GEO_REGION_TAG_POINTS, "open via broad ATS region tag"
-    return GEO_BASELINE_POINTS, "geo-eligible, no stronger signal"
+def _remote_component(remote_type: str) -> tuple[int, str]:
+    points = REMOTE_POINTS.get(remote_type, REMOTE_DEFAULT)
+    label = {"remote": "fully remote", "hybrid": "hybrid", "onsite": "on-site"}.get(remote_type, remote_type or "unknown")
+    return points, label
 
 
-def _warm_contact_component(company_slug: str) -> tuple[int, str]:
+def _warm_contact(company_slug: str) -> bool:
     with db.connect() as conn:
         row = conn.execute("SELECT notes FROM companies WHERE slug = ?", (company_slug,)).fetchone()
     notes = (row["notes"] or "").lower() if row else ""
-    if "warm contact" in notes or "warm referral" in notes:
-        return WARM_CONTACT_MAX, "warm contact noted for this company"
-    return 0, "no warm contact on file"
+    return "warm contact" in notes or "warm referral" in notes
+
+
+def _landing_component(application_stage: str | None, company_slug: str) -> tuple[int, str]:
+    base = STAGE_LIKELIHOOD.get(application_stage, STAGE_LIKELIHOOD[None])
+    warm = _warm_contact(company_slug)
+    points = min(base + (WARM_CONTACT_BONUS if warm else 0), LANDING_MAX)
+
+    if application_stage in ("Rejected by Company", "Withdrawn"):
+        label = "closed out"
+    elif not application_stage:
+        label = "no interview movement yet"
+    else:
+        label = f"at {application_stage}"
+    if warm:
+        label += ", warm contact"
+    return points, label
 
 
 def compute_initial_score(job_id: str) -> tuple[int, dict[str, Any]]:
-    """Compute the deterministic initial fit score for a job.
-
-    Returns (score, breakdown) where breakdown is JSON-serializable and
-    matches what jobs.score_breakdown_json is for. Does not write anything;
-    call jobs.set_score(job_id, score, breakdown) to persist.
-    """
+    """Compute the deterministic fit score for a job right now. Safe to
+    re-run any time application_stage or comp changes -- it always reflects
+    current state, not just the first computation. Returns (score,
+    breakdown); call jobs.set_score(job_id, score, breakdown) to persist,
+    and describe_score(breakdown) for the short text to put in Notes."""
     from careeros import jobs
 
     job = jobs.get(job_id)
 
-    bank_pts, bank_reason = _bank_match_component(job_id)
-    tier_pts, tier_reason = _company_tier_component(job["company_slug"])
-    comp_pts, comp_reason = _comp_component(job.get("comp"))
-    geo_pts, geo_reason = _geo_component(job.get("location", ""), job.get("remote_type", ""))
-    warm_pts, warm_reason = _warm_contact_component(job["company_slug"])
+    bank_pts, bank_label = _bank_match_component(job_id)
+    comp_pts, comp_label = _comp_component(job.get("comp"))
+    remote_pts, remote_label = _remote_component(job.get("remote_type", ""))
+    landing_pts, landing_label = _landing_component(job.get("application_stage"), job["company_slug"])
 
-    total = bank_pts + tier_pts + comp_pts + geo_pts + warm_pts
+    total = bank_pts + comp_pts + remote_pts + landing_pts
 
     breakdown = {
-        "bank_match": {"points": bank_pts, "max": BANK_MATCH_MAX, "reason": bank_reason},
-        "company_tier": {"points": tier_pts, "max": COMPANY_TIER_MAX, "reason": tier_reason},
-        "comp_transparency": {"points": comp_pts, "max": COMP_TRANSPARENCY_MAX, "reason": comp_reason},
-        "geo": {"points": geo_pts, "max": GEO_MAX, "reason": geo_reason},
-        "warm_contact": {"points": warm_pts, "max": WARM_CONTACT_MAX, "reason": warm_reason},
-        "basis": "initial",
+        "bank_match": {"points": bank_pts, "max": BANK_MATCH_MAX, "label": bank_label},
+        "comp": {"points": comp_pts, "max": COMP_MAX, "label": comp_label},
+        "remote": {"points": remote_pts, "max": REMOTE_MAX, "label": remote_label},
+        "landing": {"points": landing_pts, "max": LANDING_MAX, "label": landing_label},
+        "basis": "computed",
     }
     return total, breakdown
+
+
+def describe_score(breakdown: dict[str, Any], extra: str = "") -> str:
+    """Render a breakdown into a short Notes-ready sentence (aim for well
+    under NOTES_MAX_CHARS=200). `extra` is for hand-added interview context
+    a formula can't see (e.g. "HM very enthusiastic") -- append it after
+    the computed parts."""
+    parts = [
+        breakdown["bank_match"]["label"],
+        breakdown["comp"]["label"],
+        breakdown["remote"]["label"],
+        breakdown["landing"]["label"],
+    ]
+    text = "; ".join(parts).capitalize() + "."
+    if extra:
+        text = f"{text} {extra}"
+    return text

@@ -21,6 +21,7 @@ data/companies.yaml
 data/resume_rules.md
 data/cover_letter_rules.md
 careeros/local_geo.py
+careeros/local_criteria.py
 CLAUDE.md
 
 # Secrets

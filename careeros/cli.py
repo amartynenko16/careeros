@@ -513,27 +513,34 @@ def jobs_set_notes(job_id: str, notes: str) -> None:
 
 
 @jobs_app.command("score")
-def jobs_compute_score(job_id: str) -> None:
-    """Compute and set a job's initial fit score deterministically (Bank
-    match, company tier, comp transparency, geo, warm contact).
-
-    Only for the initial score -- once interview feedback exists, update by
-    hand with `jobs set-score` instead of re-running this, or it'll
-    overwrite that context with the initial-only computation."""
+def jobs_compute_score(
+    job_id: str,
+    extra: str = typer.Option("", "--extra", help="Interview context a formula can't see, appended to the Notes description."),
+    set_notes: bool = typer.Option(True, help="Also write the score's description into Notes."),
+) -> None:
+    """Compute and set a job's live fit score (Bank match, comp
+    attractiveness, remote preference, landing likelihood from stage +
+    warm contact). Safe to re-run any time application_stage or comp
+    changes. Also writes a short description of the score into Notes
+    unless --no-set-notes."""
     _require_db()
     from careeros import scoring
 
     try:
         score, breakdown = scoring.compute_initial_score(job_id)
         jobs.set_score(job_id, score, breakdown)
-    except jobs.JobNotFoundError as exc:
+        description = scoring.describe_score(breakdown, extra=extra)
+        if set_notes:
+            jobs.set_notes(job_id, description)
+    except (jobs.JobNotFoundError, ValueError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1)
     console.print(f"[green]Fit score set[/green] {job_id} -> {score}/100")
     for name, detail in breakdown.items():
         if name == "basis":
             continue
-        console.print(f"  {name}: {detail['points']}/{detail['max']} -- {detail['reason']}")
+        console.print(f"  {name}: {detail['points']}/{detail['max']} -- {detail['label']}")
+    console.print(f"  notes: {description}")
 
 
 @jobs_app.command("set-score")
