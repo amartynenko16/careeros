@@ -281,6 +281,29 @@ def notion_sync_applications_cmd(
             console.print(f"  - {s}")
 
 
+@app.command("notion-pull-applications")
+def notion_pull_applications_cmd() -> None:
+    """Pull Stage and Comp from the Notion Applications DB into local
+    SQLite -- the two fields you hand-edit directly in Notion. The only
+    exception to push()'s one-way design; run this before `jobs
+    rescore-applied` or scoring works off stale local data."""
+    _require_db()
+    try:
+        summary = notion_apps.pull_editable_fields()
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+
+    console.print(
+        f"[green]Pulled[/green] {summary.considered} row(s) considered, "
+        f"{summary.updated} updated, {summary.unchanged} unchanged"
+    )
+    if summary.skipped:
+        console.print(f"[yellow]{len(summary.skipped)} skipped:[/yellow]")
+        for s in summary.skipped:
+            console.print(f"  - {s}")
+
+
 # --- vet ---------------------------------------------------------------------
 
 @app.command("vet")
@@ -515,23 +538,23 @@ def jobs_set_notes(job_id: str, notes: str) -> None:
 @jobs_app.command("score")
 def jobs_compute_score(
     job_id: str,
-    extra: str = typer.Option("", "--extra", help="Interview context a formula can't see, appended to the Notes description."),
-    set_notes: bool = typer.Option(True, help="Also write the score's description into Notes."),
+    set_notes: bool = typer.Option(False, help="Also overwrite Notes with the score's description. Off by default -- Notes is yours to use."),
+    extra: str = typer.Option("", "--extra", help="Only used with --set-notes: interview context a formula can't see, appended to the description."),
 ) -> None:
     """Compute and set a job's live fit score (Bank match, comp
     attractiveness, remote preference, landing likelihood from stage +
     warm contact). Safe to re-run any time application_stage or comp
-    changes. Also writes a short description of the score into Notes
-    unless --no-set-notes."""
+    changes -- run `careeros notion-pull-applications` first if you've
+    edited Stage/Comp in Notion since the last pull, or this scores stale
+    data. Does not touch Notes unless --set-notes is passed."""
     _require_db()
     from careeros import scoring
 
     try:
         score, breakdown = scoring.compute_initial_score(job_id)
         jobs.set_score(job_id, score, breakdown)
-        description = scoring.describe_score(breakdown, extra=extra)
         if set_notes:
-            jobs.set_notes(job_id, description)
+            jobs.set_notes(job_id, scoring.describe_score(breakdown, extra=extra))
     except (jobs.JobNotFoundError, ValueError) as exc:
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1)
@@ -540,7 +563,6 @@ def jobs_compute_score(
         if name == "basis":
             continue
         console.print(f"  {name}: {detail['points']}/{detail['max']} -- {detail['label']}")
-    console.print(f"  notes: {description}")
 
 
 @jobs_app.command("set-score")
@@ -555,6 +577,52 @@ def jobs_set_score(job_id: str, score: int, note: str = typer.Option("", "--note
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1)
     console.print(f"[green]Fit score set[/green] {job_id} -> {score}/100")
+
+
+@jobs_app.command("rescore-applied")
+def jobs_rescore_applied(
+    pull_first: bool = typer.Option(True, help="Pull Stage/Comp from Notion before recomputing. Off only if you already just pulled."),
+    push: bool = typer.Option(True, help="Push each updated Fit Score back to Notion (existing rows -- Fit Score isn't touched by notion-sync-applications)."),
+) -> None:
+    """Recompute Fit Score for every saved/applied job in one pass: pull
+    your Notion edits (Stage, Comp) into local SQLite first, recompute,
+    then push the new scores back. Does not touch Notes.
+
+    This is the routine maintenance command -- run it whenever you've
+    updated Stage or Comp in Notion and want scores caught up."""
+    _require_db()
+    from careeros import scoring
+
+    if pull_first:
+        try:
+            pull_summary = notion_apps.pull_editable_fields()
+        except notion_apps.NotionAppsConfigError as exc:
+            console.print(f"[red]Notion config error:[/red] {exc}")
+            raise typer.Exit(code=1)
+        console.print(
+            f"[green]Pulled[/green] {pull_summary.considered} row(s), "
+            f"{pull_summary.updated} updated, {pull_summary.unchanged} unchanged"
+        )
+
+    rows = jobs.list_jobs(status="saved", limit=500) + jobs.list_jobs(status="applied", limit=500)
+    table = Table(title="Rescored")
+    table.add_column("Score")
+    table.add_column("Company")
+    table.add_column("Title")
+    pushed = 0
+    for job in sorted(rows, key=lambda j: j["id"]):
+        score, breakdown = scoring.compute_initial_score(job["id"])
+        jobs.set_score(job["id"], score, breakdown)
+        table.add_row(str(score), job["company_slug"], job["title"])
+        if push:
+            try:
+                if notion_apps.push_score(job["id"]):
+                    pushed += 1
+            except Exception as exc:
+                console.print(f"[yellow]Could not push {job['id']}: {exc}[/yellow]")
+    console.print(table)
+    if push:
+        console.print(f"[green]Pushed {pushed} score(s) to Notion.[/green]")
 
 
 @jobs_app.command("clear")

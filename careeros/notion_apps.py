@@ -141,6 +141,123 @@ def _synced_properties(job: dict[str, Any], now_iso: str) -> dict[str, Any]:
     }
 
 
+@dataclass
+class PullSummary:
+    considered: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    skipped: list[str] = field(default_factory=list)
+
+
+def _select_value(prop: dict[str, Any] | None) -> str | None:
+    if not prop:
+        return None
+    sel = prop.get("select")
+    return sel["name"] if sel else None
+
+
+def _rich_text_value(prop: dict[str, Any] | None) -> str:
+    if not prop:
+        return ""
+    return "".join(p.get("plain_text", "") for p in prop.get("rich_text") or [])
+
+
+def pull_editable_fields() -> PullSummary:
+    """Pull Stage and Comp from Notion into local SQLite -- the two fields
+    you hand-edit directly in the Applications table. This is the one
+    deliberate exception to push()'s one-way design: the only path where
+    Notion overrides local state, and only for these two fields (never
+    Name/Company/Remote Type/anything else -- those still flow local ->
+    Notion only). Run this before recomputing Fit Score, or scoring works
+    off stale local data.
+
+    A blank value in Notion never overwrites a non-blank local value --
+    only an actual edit (a real Stage selection, real Comp text) pulls.
+    """
+    from careeros import jobs as jobs_module
+
+    token, data_source_id = _require_config()
+    client = Client(auth=token)
+    summary = PullSummary()
+
+    cursor: str | None = None
+    while True:
+        resp = client.data_sources.query(
+            data_source_id=data_source_id,
+            start_cursor=cursor,
+            page_size=100,
+        )
+        for page in resp.get("results", []):
+            summary.considered += 1
+            props = page.get("properties", {})
+            job_id = _rich_text_value(props.get(PROP_JOB_ID))
+            if not job_id:
+                continue  # a manually-added Notion-only row with no local job to pull into
+
+            with db.connect() as conn:
+                existing = conn.execute(
+                    "SELECT application_stage, comp FROM jobs WHERE id = ?", (job_id,)
+                ).fetchone()
+            if existing is None:
+                summary.skipped.append(f"{job_id}: no matching local job")
+                continue
+
+            stage = _select_value(props.get(PROP_STAGE))
+            comp = _rich_text_value(props.get(PROP_COMP)).strip()
+
+            changed = False
+            if stage and stage != existing["application_stage"]:
+                if stage not in jobs_module.VALID_STAGES:
+                    summary.skipped.append(f"{job_id}: unrecognized Stage {stage!r}")
+                    stage = None
+                else:
+                    changed = True
+            if comp and comp != (existing["comp"] or ""):
+                changed = True
+
+            if not changed:
+                summary.unchanged += 1
+                continue
+
+            with db.connect() as conn:
+                conn.execute(
+                    "UPDATE jobs SET "
+                    "application_stage = COALESCE(?, application_stage), "
+                    "comp = CASE WHEN ? != '' THEN ? ELSE comp END "
+                    "WHERE id = ?",
+                    (stage, comp, comp, job_id),
+                )
+                conn.commit()
+            summary.updated += 1
+
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+
+    return summary
+
+
+def push_score(job_id: str) -> bool:
+    """Push a job's current local Fit Score to its existing Notion row.
+    Fit Score is an _initial_properties field (write-once on creation), so
+    a later change needs this explicit push rather than the generic push()
+    pipeline. Returns False if the job has no Notion page yet or no score
+    set (run push() first in that case)."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT score, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None or row["score"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_FIT_SCORE: _number(row["score"])},
+    )
+    return True
+
+
 def _find_existing_page(client: Client, data_source_id: str, job_id: str) -> str | None:
     """Fallback lookup by CareerOS Job ID, for when a job's stored
     notion_applications_page_id is missing (first push, or was cleared)."""
