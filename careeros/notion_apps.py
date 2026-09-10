@@ -50,6 +50,7 @@ PROP_URL = "Job URL"
 PROP_LOCATION = "Location"
 PROP_REMOTE_TYPE = "Remote Type"
 PROP_COMP = "Comp"
+PROP_FIT_SCORE = "Fit Score"
 PROP_DATE_APPLIED = "Date Applied"
 PROP_LAST_SYNCED = "Last Synced"
 
@@ -101,6 +102,10 @@ def _date(value: str | None) -> dict[str, Any]:
     return {"date": ({"start": value} if value else None)}
 
 
+def _number(value: int | None) -> dict[str, Any]:
+    return {"number": value}
+
+
 def _notion_display_title(title: str) -> str:
     """Naming convention for the Notion Name column:
     just the role title, no company suffix (Company is its own column now),
@@ -119,6 +124,7 @@ def _initial_properties(job: dict[str, Any]) -> dict[str, Any]:
         PROP_STAGE: _select(job.get("application_stage") or None),
         PROP_REMOTE_TYPE: _select(_REMOTE_LABELS.get(job.get("remote_type", ""), "Unknown")),
         PROP_COMP: _rich_text(job.get("comp") or ""),
+        PROP_FIT_SCORE: _number(job.get("score")),
     }
 
 

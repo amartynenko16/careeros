@@ -498,6 +498,44 @@ def jobs_set_comp(job_id: str, comp: str) -> None:
     console.print(f"[green]Comp set[/green] {job_id} -> {comp}")
 
 
+@jobs_app.command("score")
+def jobs_compute_score(job_id: str) -> None:
+    """Compute and set a job's initial fit score deterministically (Bank
+    match, company tier, comp transparency, geo, warm contact).
+
+    Only for the initial score -- once interview feedback exists, update by
+    hand with `jobs set-score` instead of re-running this, or it'll
+    overwrite that context with the initial-only computation."""
+    _require_db()
+    from careeros import scoring
+
+    try:
+        score, breakdown = scoring.compute_initial_score(job_id)
+        jobs.set_score(job_id, score, breakdown)
+    except jobs.JobNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Fit score set[/green] {job_id} -> {score}/100")
+    for name, detail in breakdown.items():
+        if name == "basis":
+            continue
+        console.print(f"  {name}: {detail['points']}/{detail['max']} -- {detail['reason']}")
+
+
+@jobs_app.command("set-score")
+def jobs_set_score(job_id: str, score: int, note: str = typer.Option("", "--note")) -> None:
+    """Manually set a job's live fit score (0-100), e.g. after interview
+    feedback. Overwrites whatever score/breakdown is currently stored."""
+    _require_db()
+    breakdown = {"basis": "manual", "note": note} if note else {"basis": "manual"}
+    try:
+        jobs.set_score(job_id, score, breakdown)
+    except (jobs.JobNotFoundError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Fit score set[/green] {job_id} -> {score}/100")
+
+
 @jobs_app.command("clear")
 def jobs_clear(
     confirm: bool = typer.Option(

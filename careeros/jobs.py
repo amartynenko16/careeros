@@ -4,6 +4,7 @@ Kept separate from scan so triage operations don't require a Notion sync or an
 ATS call.
 """
 
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -163,6 +164,28 @@ def set_comp(job_id: str, comp: str) -> None:
         cur = conn.execute(
             "UPDATE jobs SET comp = ? WHERE id = ?",
             (comp, job_id),
+        )
+        if cur.rowcount == 0:
+            raise JobNotFoundError(f"No job with id '{job_id}'.")
+        conn.commit()
+
+
+def set_score(job_id: str, score: int, breakdown: dict | None = None) -> None:
+    """Set a job's live fit score (0-100) and optional breakdown.
+
+    Initial score comes from scoring.compute_initial_score() (deterministic,
+    rules over Bank match / company tier / comp transparency / geo / warm
+    contact). Later updates -- interview feedback, progression -- are
+    manual: there's no automated signal for "the phone screen went well",
+    so that part is always a deliberate set_score() call, same pattern as
+    Stage and Comp."""
+    if not 0 <= score <= 100:
+        raise ValueError(f"score must be 0-100, got {score}")
+    breakdown_json = json.dumps(breakdown) if breakdown is not None else None
+    with db.connect() as conn:
+        cur = conn.execute(
+            "UPDATE jobs SET score = ?, score_breakdown_json = ? WHERE id = ?",
+            (score, breakdown_json, job_id),
         )
         if cur.rowcount == 0:
             raise JobNotFoundError(f"No job with id '{job_id}'.")

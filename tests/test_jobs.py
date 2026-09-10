@@ -1,5 +1,6 @@
 """Tests for jobs.py triage operations, isolated from the real careeros.db."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -53,6 +54,32 @@ def test_set_remote_type_missing_job_raises(tmp_path: Path, monkeypatch: pytest.
 
     with pytest.raises(jobs.JobNotFoundError):
         jobs.set_remote_type("greenhouse::does-not-exist", "remote")
+
+
+def test_set_score_persists_with_breakdown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+    _insert_job()
+
+    jobs.set_score("greenhouse::123", 72, {"basis": "manual", "note": "strong phone screen"})
+
+    job = jobs.get("greenhouse::123")
+    assert job["score"] == 72
+    assert json.loads(job["score_breakdown_json"]) == {"basis": "manual", "note": "strong phone screen"}
+
+
+def test_set_score_rejects_out_of_range(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+    _insert_job()
+
+    with pytest.raises(ValueError):
+        jobs.set_score("greenhouse::123", 101)
+
+
+def test_set_score_missing_job_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _isolate_db(tmp_path, monkeypatch)
+
+    with pytest.raises(jobs.JobNotFoundError):
+        jobs.set_score("greenhouse::does-not-exist", 50)
 
 
 def test_set_comp_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
