@@ -109,7 +109,7 @@ def fetch_single_job(ats_type: str, company_slug: str, job_id: str) -> dict[str,
         if r.status_code != 200:
             return None
         data = r.json()
-        from careeros.fetchers.ashby import _remote_type, _strip_html
+        from careeros.fetchers.ashby import _compensation_summary, _remote_type, _strip_html
 
         for j in data.get("jobs", []):
             if j.get("id") == job_id:
@@ -125,6 +125,7 @@ def fetch_single_job(ats_type: str, company_slug: str, job_id: str) -> dict[str,
                     "remote_type": _remote_type(location, is_remote, workplace_type),
                     "description": description,
                     "updated_at": str(j.get("publishedAt", "") or j.get("updatedAt", "") or ""),
+                    "comp": _compensation_summary(j),
                 }
         return None
 
@@ -165,8 +166,8 @@ def _store_and_evaluate(ats_type: str, company_slug: str, raw: dict[str, Any]) -
         _ensure_company_row(conn, company_slug, ats_type, now)
         conn.execute(
             """
-            INSERT INTO jobs (id, company_slug, ats_type, ats_url, title, location, remote_type, description, posted_at, fetched_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+            INSERT INTO jobs (id, company_slug, ats_type, ats_url, title, location, remote_type, description, posted_at, fetched_at, comp, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
             ON CONFLICT(id) DO UPDATE SET
                 ats_url = excluded.ats_url,
                 title = excluded.title,
@@ -176,9 +177,13 @@ def _store_and_evaluate(ats_type: str, company_slug: str, raw: dict[str, Any]) -
                 posted_at = excluded.posted_at,
                 fetched_at = excluded.fetched_at
             """,
+            # comp is deliberately excluded from the ON CONFLICT UPDATE, same
+            # reasoning as scan.py's insert-only handling: re-adding an
+            # already-known job must never overwrite a comp value Alex has
+            # since corrected/landed.
             (
                 job_id, company_slug, ats_type, raw.get("ats_url", ""), title, location,
-                remote_type, description, posted_at, now,
+                remote_type, description, posted_at, now, raw.get("comp", ""),
             ),
         )
         conn.commit()

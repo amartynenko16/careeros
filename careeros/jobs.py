@@ -24,8 +24,9 @@ VALID_STATUSES = {"new", "saved", "rejected", "applied"}
 # 2026-09-02); keep these in sync if that schema ever changes.
 VALID_STAGES = {
     "1. Phone Screen", "2. First Round Interview", "2.5. Follow-Up Email",
-    "3. Second Round Interview", "3.5. Follow-Up Email", "4. Final Round",
-    "4.5. Follow-Up Email", "5. Offer", "Rejected by Company", "Withdrawn",
+    "3. Second Round Interview", "3.5. Follow-Up Email", "4. Third Round Interview",
+    "4.5. Follow-Up Email", "5. Final Round", "5.5. Follow-Up Email", "6. Offer",
+    "Rejected by Company", "Withdrawn",
 }
 
 # Corrections to a job's remote_type persist here (local SQLite is what
@@ -121,7 +122,11 @@ def set_status(job_id: str, status: str) -> None:
 def set_application_stage(job_id: str, stage: str) -> None:
     """Update a job's post-application pipeline stage. Does not require
     status='applied' (you might record a stage slightly out of order), but
-    the stage value itself must be one of VALID_STAGES."""
+    the stage value itself must be one of VALID_STAGES.
+
+    Also run `careeros notion-push-stage <id>` right after this -- Stage is
+    write-once on Notion row creation, so without an explicit push the
+    change only lives locally (same gap as Remote Type, fixed 2026-09-24)."""
     if stage not in VALID_STAGES:
         raise InvalidStageError(
             f"Unknown stage '{stage}'. Valid: {sorted(VALID_STAGES)}"
@@ -140,7 +145,13 @@ def set_application_stage(job_id: str, stage: str) -> None:
 def set_remote_type(job_id: str, remote_type: str) -> None:
     """Correct a job's remote_type by hand (ATS data is sometimes wrong,
     especially on manually-added roles). Persists locally so it survives
-    the next notion-sync-applications push, unlike an edit made in Notion."""
+    the next notion-sync-applications push, unlike an edit made in Notion.
+
+    Also run `careeros notion-push-remote-type <id>` right after this --
+    Remote Type is write-once on Notion row creation, so without an explicit
+    push the correction only lives locally and the next
+    notion-pull-applications will silently overwrite it back to Notion's
+    stale original value (hit this for real on Deliverect, 2026-09-22)."""
     if remote_type not in VALID_REMOTE_TYPES:
         raise InvalidRemoteTypeError(
             f"Unknown remote type '{remote_type}'. Valid: {sorted(VALID_REMOTE_TYPES)}"
@@ -187,6 +198,45 @@ def set_score(job_id: str, score: int, breakdown: dict | None = None) -> None:
             "UPDATE jobs SET score = ?, score_breakdown_json = ? WHERE id = ?",
             (score, breakdown_json, job_id),
         )
+        if cur.rowcount == 0:
+            raise JobNotFoundError(f"No job with id '{job_id}'.")
+        conn.commit()
+
+
+DESIRE_MIN = -50
+DESIRE_MAX = 50
+DESIRE_NOTES_MAX_CHARS = 200
+
+
+def set_desire(job_id: str, desire_score: int, desire_notes: str | None = None) -> None:
+    """Set how much you actually want this one, independent of fit: culture,
+    product pull, friction, stability -- signals scoring.py's deterministic
+    components can't see. Symmetric -50 to +50 range (widened 2026-09-22 from
+    an initial asymmetric -15/+10): wide enough that a strongly felt desire
+    -- positive or negative -- can dominate an otherwise-inflated or
+    otherwise-deflated Bank-match number, not just nudge it like
+    warm_contact's flat bonus does. 0 or unset means neutral -- not rated,
+    not indifferent. desire_notes mirrors the notes convention (concise,
+    max 200 chars): the *why* behind the number."""
+    if not DESIRE_MIN <= desire_score <= DESIRE_MAX:
+        raise ValueError(
+            f"desire_score must be {DESIRE_MIN}-{DESIRE_MAX}, got {desire_score}"
+        )
+    if desire_notes is not None and len(desire_notes) > DESIRE_NOTES_MAX_CHARS:
+        raise ValueError(
+            f"desire_notes is {len(desire_notes)} chars, max is {DESIRE_NOTES_MAX_CHARS}"
+        )
+    with db.connect() as conn:
+        if desire_notes is not None:
+            cur = conn.execute(
+                "UPDATE jobs SET desire_score = ?, desire_notes = ? WHERE id = ?",
+                (desire_score, desire_notes, job_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE jobs SET desire_score = ? WHERE id = ?",
+                (desire_score, job_id),
+            )
         if cur.rowcount == 0:
             raise JobNotFoundError(f"No job with id '{job_id}'.")
         conn.commit()

@@ -51,6 +51,7 @@ PROP_LOCATION = "Location"
 PROP_REMOTE_TYPE = "Remote Type"
 PROP_COMP = "Comp"
 PROP_FIT_SCORE = "Fit Score"
+PROP_DESIRE = "Desire"
 PROP_NOTES = "Notes"
 PROP_DATE_APPLIED = "Date Applied"
 PROP_LAST_SYNCED = "Last Synced"
@@ -127,6 +128,7 @@ def _initial_properties(job: dict[str, Any]) -> dict[str, Any]:
         PROP_REMOTE_TYPE: _select(_REMOTE_LABELS.get(job.get("remote_type", ""), "Unknown")),
         PROP_COMP: _rich_text(job.get("comp") or ""),
         PROP_FIT_SCORE: _number(job.get("score")),
+        PROP_DESIRE: _number(job.get("desire_score")),
         PROP_NOTES: _rich_text(job.get("notes") or ""),
     }
 
@@ -250,6 +252,29 @@ def pull_editable_fields() -> PullSummary:
     return summary
 
 
+def push_stage(job_id: str) -> bool:
+    """Push a job's current local application_stage to its existing Notion
+    row. Same write-once-on-creation gap as Remote Type (fixed 2026-09-24) --
+    Stage is an _initial_properties field, and --update-existing on
+    notion-sync-applications only refreshes bookkeeping fields (URL/Location/
+    Date Applied/Last Synced), not Stage. Without this, a later
+    `jobs stage <id> <stage>` call (e.g. marking a withdrawal) only updates
+    local SQLite and silently never reaches Notion."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT application_stage, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_STAGE: _select(row["application_stage"] or None)},
+    )
+    return True
+
+
 def push_score(job_id: str) -> bool:
     """Push a job's current local Fit Score to its existing Notion row.
     Fit Score is an _initial_properties field (write-once on creation), so
@@ -267,6 +292,70 @@ def push_score(job_id: str) -> bool:
     client.pages.update(
         page_id=row["notion_applications_page_id"],
         properties={PROP_FIT_SCORE: _number(row["score"])},
+    )
+    return True
+
+
+def push_desire(job_id: str) -> bool:
+    """Push a job's current local Desire score to its existing Notion row.
+    Same write-once-on-creation situation as Fit Score/Comp/Notes -- needed
+    after jobs.set_desire() changes it post-creation."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT desire_score, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_DESIRE: _number(row["desire_score"])},
+    )
+    return True
+
+
+def push_remote_type(job_id: str) -> bool:
+    """Push a job's current local Remote Type to its existing Notion row.
+    Same write-once-on-creation situation as Fit Score/Comp/Notes/Desire --
+    there was no push path for this at all until 2026-09-22, which is how a
+    local jobs.set_remote_type() correction (Deliverect: onsite -> hybrid ->
+    remote) silently reverted on the next notion-pull-applications: nothing
+    had ever pushed the correction to Notion, so the pull just read back
+    Notion's stale original value. Any future local Remote Type correction
+    needs this call too, or it will revert the same way."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT remote_type, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_REMOTE_TYPE: _select(_REMOTE_LABELS.get(row["remote_type"] or "", "Unknown"))},
+    )
+    return True
+
+
+def push_comp(job_id: str) -> bool:
+    """Push a job's current local Comp to its existing Notion row. Same
+    write-once-on-creation situation as Fit Score and Notes -- needed when
+    Comp is set or corrected (jobs.set_comp(), or a comp discovered after
+    the row already exists, e.g. the 2026-09-11 Ashby compensation-field
+    backfill) after the Notion page was already created."""
+    with db.connect() as conn:
+        row = conn.execute(
+            "SELECT comp, notion_applications_page_id FROM jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+    if row is None or row["notion_applications_page_id"] is None:
+        return False
+    token, _ = _require_config()
+    client = Client(auth=token)
+    client.pages.update(
+        page_id=row["notion_applications_page_id"],
+        properties={PROP_COMP: _rich_text(row["comp"] or "")},
     )
     return True
 

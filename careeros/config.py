@@ -14,6 +14,7 @@ APPLICATIONS_DIR = PROJECT_ROOT / "applications"
 
 DB_PATH = DATA_DIR / "careeros.db"
 FACTS_YAML_PATH = DATA_DIR / "facts.yaml"
+RESUME_BASELINE_PATH = DATA_DIR / "resume_baseline.json"
 
 # Load .env if present. Silent if missing.
 load_dotenv(PROJECT_ROOT / ".env")

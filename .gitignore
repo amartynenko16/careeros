@@ -20,6 +20,7 @@ data/facts.yaml
 data/companies.yaml
 data/resume_rules.md
 data/cover_letter_rules.md
+data/resume_baseline.json
 careeros/local_geo.py
 careeros/local_criteria.py
 CLAUDE.md

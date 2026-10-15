@@ -136,6 +136,34 @@ def test_scan_filters_geo_ineligible(tmp_path: Path, monkeypatch: pytest.MonkeyP
         jobs.get("greenhouse::3")
 
 
+def test_scan_sets_comp_on_insert_but_never_overwrites_on_update(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Found 2026-09-11: comp must populate on first insert (from an ATS
+    # that exposes it, e.g. Ashby's compensationTierSummary) but must never
+    # be clobbered on a later rescan, since Alex may have since corrected
+    # or landed a real figure via `jobs set-comp`.
+    _isolate(tmp_path, monkeypatch)
+    _seed_companies(tmp_path)
+
+    def fake_gh_with_comp(slug: str) -> list[RawJob]:
+        return [
+            RawJob(ats_id="1", ats_url="https://x/1", title="Solutions Consultant", location="Remote", remote_type="remote", description="A", department="CS", updated_at="", comp="CA$185K - CA$222K"),
+        ]
+
+    monkeypatch.setitem(scan.FETCHERS, "greenhouse", fake_gh_with_comp)
+    scan.scan()
+    assert jobs.get("greenhouse::1")["comp"] == "CA$185K - CA$222K"
+
+    # Alex corrects/lands a real figure locally.
+    jobs.set_comp("greenhouse::1", "$200K landed - Posted: CA$185K - CA$222K")
+
+    # A rescan re-fetches the same posting (ATS comp unchanged) -- must not
+    # revert the locally-corrected value.
+    scan.scan()
+    assert jobs.get("greenhouse::1")["comp"] == "$200K landed - Posted: CA$185K - CA$222K"
+
+
 def test_scan_records_fetcher_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate(tmp_path, monkeypatch)
     _seed_companies(tmp_path)

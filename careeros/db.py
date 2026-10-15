@@ -87,11 +87,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     score_breakdown_json  TEXT,
     status            TEXT DEFAULT 'new', -- new, saved, rejected, applied
     status_at         TEXT,
-    application_stage TEXT,               -- 1. Phone Screen, 2. First Round Interview, 3. Second Round Interview, 4. Final Round, 5. Offer, Rejected by Company, Withdrawn (only meaningful once status='applied'; empty means Notion's Status formula shows "Applied")
+    application_stage TEXT,               -- 1. Phone Screen, 2. First Round Interview, 3. Second Round Interview, 4. Third Round Interview, 5. Final Round, 6. Offer, Rejected by Company, Withdrawn (only meaningful once status='applied'; empty means Notion's Status formula shows "Applied"; see jobs.VALID_STAGES for the full set including .5 follow-up-email stages)
     application_stage_at  TEXT,
     date_applied      TEXT,               -- date (not datetime) you actually applied; distinct from status_at, which is when the DB row changed
     notion_applications_page_id  TEXT,    -- Notion page id in the 📋 Applications database, set on first push, used to upsert instead of duplicating
-    notion_last_synced_at  TEXT
+    notion_last_synced_at  TEXT,
+    desire_score      INTEGER,           -- manual, -50 to +50: how much you actually want this one (culture, product, friction, stability) independent of fit. NULL = not rated yet, treated as neutral (0) by scoring.
+    desire_notes      TEXT               -- short free-text reason for the desire_score, max 200 chars, same convention as notes
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
@@ -142,9 +144,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "notion_last_synced_at",
         "comp",
         "notes",
+        "desire_notes",
     ):
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} TEXT")
+    if "desire_score" not in existing_cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN desire_score INTEGER")
 
 
 @contextmanager

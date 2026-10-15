@@ -23,6 +23,7 @@ Command layout:
     careeros tailor <id>            Build a Model B2 tailoring package for a job.
     careeros tailor-budget <path>   Total approved bullets against the one-page char budget.
     careeros resume-build <id>      Write tailored content (--content <json>) into a template DOCX.
+    careeros resume-baseline        Show the last-built resume/cover letter + char counts used.
     careeros cover-letter-build <id> Write tailored content (--content <json>) into a cover letter DOCX.
 """
 
@@ -304,6 +305,24 @@ def notion_pull_applications_cmd() -> None:
             console.print(f"  - {s}")
 
 
+@app.command("notion-push-stage")
+def notion_push_stage_cmd(job_id: str) -> None:
+    """Push a job's current local application_stage to its existing Notion
+    row. Run this after `careeros jobs stage <id> <stage>`, or the change
+    only lives locally -- Stage is write-once on Notion row creation, and
+    notion-sync-applications' --update-existing does not touch it either."""
+    _require_db()
+    try:
+        ok = notion_apps.push_stage(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Stage pushed[/green] {job_id}")
+
+
 @app.command("notion-push-score")
 def notion_push_score_cmd(job_id: str) -> None:
     """Push a job's current local Fit Score to its existing Notion row.
@@ -320,6 +339,57 @@ def notion_push_score_cmd(job_id: str) -> None:
         console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet, or no score set.")
         raise typer.Exit(code=1)
     console.print(f"[green]Fit Score pushed[/green] {job_id}")
+
+
+@app.command("notion-push-desire")
+def notion_push_desire_cmd(job_id: str) -> None:
+    """Push a job's current local Desire score to its existing Notion row.
+    Same write-once-on-creation situation as Fit Score."""
+    _require_db()
+    try:
+        ok = notion_apps.push_desire(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Desire pushed[/green] {job_id}")
+
+
+@app.command("notion-push-remote-type")
+def notion_push_remote_type_cmd(job_id: str) -> None:
+    """Push a job's current local Remote Type to its existing Notion row.
+    Same write-once-on-creation situation as Fit Score. Run this every time
+    after `jobs set-remote-type`, or the correction will silently revert on
+    the next notion-pull-applications (it'll just re-read Notion's stale
+    original value)."""
+    _require_db()
+    try:
+        ok = notion_apps.push_remote_type(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Remote Type pushed[/green] {job_id}")
+
+
+@app.command("notion-push-comp")
+def notion_push_comp_cmd(job_id: str) -> None:
+    """Push a job's current local Comp to its existing Notion row. Same
+    write-once-on-creation situation as Fit Score and Notes."""
+    _require_db()
+    try:
+        ok = notion_apps.push_comp(job_id)
+    except notion_apps.NotionAppsConfigError as exc:
+        console.print(f"[red]Notion config error:[/red] {exc}")
+        raise typer.Exit(code=1)
+    if not ok:
+        console.print(f"[yellow]Nothing pushed[/yellow] -- {job_id} has no Notion page yet.")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Comp pushed[/green] {job_id}")
 
 
 @app.command("notion-push-notes")
@@ -511,8 +581,10 @@ def jobs_mark_applied(job_id: str) -> None:
 @jobs_app.command("stage")
 def jobs_stage(job_id: str, stage: str) -> None:
     """Set a job's post-application pipeline stage (1. Phone Screen,
-    2. First Round Interview, 3. Second Round Interview, 4. Final Round,
-    5. Offer, Rejected by Company, Withdrawn)."""
+    2. First Round Interview, 2.5. Follow-Up Email, 3. Second Round Interview,
+    3.5. Follow-Up Email, 4. Third Round Interview, 4.5. Follow-Up Email,
+    5. Final Round, 5.5. Follow-Up Email, 6. Offer, Rejected by Company,
+    Withdrawn) -- see jobs.VALID_STAGES for the authoritative set."""
     _require_db()
     try:
         jobs.set_application_stage(job_id, stage)
@@ -569,6 +641,26 @@ def jobs_set_notes(job_id: str, notes: str) -> None:
     console.print(f"[green]Notes set[/green] {job_id} -> {notes}")
 
 
+@jobs_app.command("set-desire")
+def jobs_set_desire(
+    job_id: str,
+    desire_score: int = typer.Option(..., "--desire-score", help="-50 to +50. A plain positional arg misparses negative numbers as a flag, so this is an option instead."),
+    notes: str = typer.Option("", "--notes", help="Why -- culture, product pull, friction, stability. Max 200 chars."),
+) -> None:
+    """Set how much you actually want this one (-50 to +50), independent of
+    fit: culture, product pull, friction, cases for instability -- signals
+    the deterministic components can't see. Feeds into `careeros jobs score`
+    as the 5th component; run that (or rescore-applied) afterward to apply
+    it to the stored Fit Score."""
+    _require_db()
+    try:
+        jobs.set_desire(job_id, desire_score, notes or None)
+    except (jobs.JobNotFoundError, ValueError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1)
+    console.print(f"[green]Desire set[/green] {job_id} -> {desire_score:+d}")
+
+
 @jobs_app.command("score")
 def jobs_compute_score(
     job_id: str,
@@ -576,11 +668,12 @@ def jobs_compute_score(
     extra: str = typer.Option("", "--extra", help="Only used with --set-notes: interview context a formula can't see, appended to the description."),
 ) -> None:
     """Compute and set a job's live fit score (Bank match, comp
-    attractiveness, remote preference, landing likelihood from stage +
-    warm contact). Safe to re-run any time application_stage or comp
-    changes -- run `careeros notion-pull-applications` first if you've
-    edited Stage/Comp in Notion since the last pull, or this scores stale
-    data. Does not touch Notes unless --set-notes is passed."""
+    attractiveness, remote preference, plus a flat warm-contact bonus --
+    application stage no longer factors in, see scoring.py's module
+    docstring). Safe to re-run any time comp changes -- run `careeros
+    notion-pull-applications` first if you've
+    edited Comp in Notion since the last pull, or this scores stale data.
+    Does not touch Notes unless --set-notes is passed."""
     _require_db()
     from careeros import scoring
 
@@ -876,6 +969,20 @@ def resume_build_cmd(
         console.print(f"[red]{exc}[/red]")
         raise typer.Exit(code=1)
     console.print(f"[green]Built resume[/green] at [cyan]{path}[/cyan]")
+
+
+@app.command("resume-baseline")
+def resume_baseline_cmd() -> None:
+    """Show the persisted record of the most recently built resume/cover
+    letter and the character counts used in them (data/resume_baseline.json).
+    Load this before a tailoring session instead of asking Alex to re-supply
+    his current resume and section limits from scratch."""
+    baseline = resume.load_baseline()
+    if not baseline:
+        console.print("[yellow]No baseline yet -- build a resume or cover letter first.[/yellow]")
+        return
+    for key, value in baseline.items():
+        console.print(f"[cyan]{key}[/cyan]: {value}")
 
 
 # --- cover letter ----------------------------------------------------------

@@ -13,13 +13,14 @@ only writes it into a copy of the template.
 
 import json
 import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 
 import docx
 
 from careeros import jobs
 from careeros.config import APPLICATIONS_DIR
-from careeros.resume import ResumeBuildError, _resize_bullet_block, _set_paragraph_text, default_filename
+from careeros.resume import ResumeBuildError, _resize_bullet_block, _set_paragraph_text, default_filename, update_baseline
 from careeros.tailor import _slugify
 
 
@@ -107,4 +108,16 @@ def build(job_id: str, content_path: str, out_path: str | None = None) -> str:
         set_body_paragraphs(doc, content["paragraphs"])
 
     doc.save(dest)
+
+    baseline_updates = {
+        "cover_letter_template": str(dest.resolve()),
+        "cover_letter_job_id": job_id,
+        "cover_letter_job_title": job["title"],
+        "cover_letter_company": job["company_slug"],
+        "cover_letter_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if "paragraphs" in content:
+        baseline_updates["cover_letter_chars"] = sum(len(p) for p in content["paragraphs"])
+    update_baseline(baseline_updates)
+
     return str(dest)

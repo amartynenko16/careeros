@@ -1,4 +1,4 @@
-"""Tests for scoring.py: live fit score (Bank match, comp, remote, landing)."""
+"""Tests for scoring.py: live fit score (Bank match, comp, remote, warm contact)."""
 
 import json
 from datetime import datetime, timezone
@@ -100,32 +100,39 @@ def test_comp_component_unknown_is_neutral(tmp_path: Path, monkeypatch: pytest.M
     assert pts == scoring.COMP_UNKNOWN
 
 
-# --- landing component -------------------------------------------------------
-
-def test_landing_component_rejected_is_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _isolate(tmp_path, monkeypatch)
-    _insert_company("acme")
-    pts, label = scoring._landing_component("Rejected by Company", "acme")
-    assert pts == 0
-    assert "closed" in label
-
-
-def test_landing_component_final_round_beats_phone_screen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _isolate(tmp_path, monkeypatch)
-    _insert_company("acme")
-    phone, _ = scoring._landing_component("1. Phone Screen", "acme")
-    final, _ = scoring._landing_component("4. Final Round", "acme")
-    assert final > phone
+def test_comp_component_is_proportional_not_a_cliff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Real case (2026-09-17): $118K vs a $120K floor is a ~2% gap and
+    # shouldn't cost anywhere near half of COMP_MAX, the way the old fixed
+    # bands did (COMP_AT_FLOOR=24 vs COMP_BELOW_FLOOR_CLOSE=13, an 11pt
+    # cliff for 2%).
+    monkeypatch.setattr(scoring, "COMP_FLOOR", 120000)
+    at_floor, _ = scoring._comp_component("Landed: $120K base")
+    just_under, _ = scoring._comp_component("Landed: $118K base")
+    assert 0 < at_floor - just_under <= 3
 
 
-def test_landing_component_warm_contact_bonus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_comp_component_is_monotonic_with_figure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(scoring, "COMP_FLOOR", 120000)
+    figures = ["$95K", "$105K", "$115K", "$120K", "$125K", "$138K", "$150K"]
+    points = [scoring._comp_component(f"Landed: {f} base")[0] for f in figures]
+    assert points == sorted(points)
+
+
+# --- warm contact component --------------------------------------------------
+# Stage/application progress was removed from scoring entirely (2026-09-17,
+# see scoring.py's module docstring) -- it's a momentum signal, not a fit
+# signal. Only the warm-contact bonus remains from the old landing component.
+
+def test_warm_contact_component_bonus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate(tmp_path, monkeypatch)
     _insert_company("warmco", notes="Warm contact via a former colleague.")
     _insert_company("coldco", notes="")
-    warm, warm_label = scoring._landing_component("1. Phone Screen", "warmco")
-    cold, _ = scoring._landing_component("1. Phone Screen", "coldco")
-    assert warm == cold + scoring.WARM_CONTACT_BONUS
+    warm, warm_label = scoring._warm_contact_component("warmco")
+    cold, cold_label = scoring._warm_contact_component("coldco")
+    assert warm == scoring.WARM_CONTACT_BONUS
+    assert cold == 0
     assert "warm contact" in warm_label
+    assert "no warm contact" in cold_label
 
 
 # --- full integration -------------------------------------------------------
@@ -146,10 +153,10 @@ def test_compute_initial_score_integration(tmp_path: Path, monkeypatch: pytest.M
     assert breakdown["bank_match"]["points"] == scoring.STRONG_MATCH_POINTS  # 1 Strong match
     assert breakdown["comp"]["points"] == scoring.COMP_WELL_ABOVE_FLOOR
     assert breakdown["remote"]["points"] == scoring.REMOTE_POINTS["remote"]
-    assert breakdown["landing"]["points"] == scoring.STAGE_LIKELIHOOD["3. Second Round Interview"] + scoring.WARM_CONTACT_BONUS
+    assert breakdown["warm_contact"]["points"] == scoring.WARM_CONTACT_BONUS  # stage doesn't factor in
     assert score == (
         breakdown["bank_match"]["points"] + breakdown["comp"]["points"]
-        + breakdown["remote"]["points"] + breakdown["landing"]["points"]
+        + breakdown["remote"]["points"] + breakdown["warm_contact"]["points"]
     )
 
 

@@ -141,9 +141,17 @@ def _upsert_job(
         ).fetchone()
 
         if existing is None:
-            cols = ["id"] + list(_ATS_COLUMNS)
+            # comp is INSERT-only, deliberately excluded from _ATS_COLUMNS
+            # (which every UPDATE below overwrites unconditionally): once a
+            # job exists, `comp` becomes Alex's to correct/land (the
+            # "<landed> - Posted: <posted>" format via jobs.set_comp()), and
+            # a re-scan must never blow that away with the raw posted figure
+            # again. Only Ashby currently exposes a real structured comp
+            # field (found 2026-09-11); Greenhouse/Lever RawJobs won't have
+            # `comp` set at all, and job.get("comp", "") covers that.
+            cols = ["id"] + list(_ATS_COLUMNS) + ["comp"]
+            values = [job_id] + [row[c] for c in _ATS_COLUMNS] + [job.get("comp", "")]
             placeholders = ", ".join(["?"] * len(cols))
-            values = [row[c] for c in cols]
             conn.execute(
                 f"INSERT INTO jobs ({', '.join(cols)}) VALUES ({placeholders})",
                 values,

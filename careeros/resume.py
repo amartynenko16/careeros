@@ -24,6 +24,8 @@ now handled generically here rather than special-cased per document:
 
 import copy
 import json
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -32,12 +34,36 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 
 from careeros import db, facts, jobs
-from careeros.config import APPLICATIONS_DIR
+from careeros.config import APPLICATIONS_DIR, RESUME_BASELINE_PATH
 from careeros.tailor import _slugify
 
 
 class ResumeBuildError(ValueError):
     pass
+
+
+# --- persisted baseline: last-built resume/cover-letter + the character
+# counts that were actually used, so a future tailoring session can load
+# "what's current" instead of re-deriving it by hand from applications/
+# file timestamps (see CLAUDE.md 2026-10-07 for the incident this fixes).
+
+def load_baseline() -> dict:
+    """Read data/resume_baseline.json. Empty dict if it doesn't exist yet
+    (first run, or before any resume/cover letter has been built)."""
+    if not RESUME_BASELINE_PATH.exists():
+        return {}
+    return json.loads(RESUME_BASELINE_PATH.read_text(encoding="utf-8"))
+
+
+def update_baseline(updates: dict) -> None:
+    """Merge updates into data/resume_baseline.json. Only the keys passed
+    are changed; everything else already stored is left alone. Called by
+    both resume.py's and cover_letter.py's build() on every successful
+    build, so the file always reflects the most recently produced
+    documents and the exact character counts used in them."""
+    data = load_baseline()
+    data.update(updates)
+    RESUME_BASELINE_PATH.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 # --- low-level paragraph helpers --------------------------------------------
@@ -342,6 +368,19 @@ def _strip_empty_list_paragraphs(doc: docx.Document) -> None:
             _delete_paragraph(para)
 
 
+_FILENAME_UNSAFE_RE = re.compile(r'[\/\\:*?"<>|]')
+
+
+def _sanitize_filename_component(text: str) -> str:
+    """Replace characters that break a filesystem path (found 2026-09-24:
+    a job title containing '/', e.g. 'Integrations (US/CA)', turned into an
+    unintended subdirectory and made shutil.copy fail with FileNotFoundError
+    inside default_filename()'s output). Collapses any run of unsafe
+    characters to a single '-' rather than dropping them, so 'US/CA' becomes
+    'US-CA', not 'USCA'."""
+    return _FILENAME_UNSAFE_RE.sub("-", text).strip()
+
+
 def default_filename(job: dict, doc_type: str) -> str:
     """Naming convention: '<Your Name> [Resume|Cover Letter] - [Role Title] -
     [Company Name].docx'. Name comes from data/facts.yaml (personal.name).
@@ -349,7 +388,7 @@ def default_filename(job: dict, doc_type: str) -> str:
     cover_letter.py."""
     name = facts.get("personal.name") or "Candidate"
     company = _company_display_name(job["company_slug"])
-    title = job["title"].strip()
+    title = _sanitize_filename_component(job["title"].strip())
     return f"{name} {doc_type} - {title} - {company}.docx"
 
 
@@ -413,4 +452,24 @@ def build(job_id: str, content_path: str, out_path: str | None = None) -> str:
     _strip_empty_list_paragraphs(doc)
 
     doc.save(dest)
+
+    baseline_updates = {
+        "resume_template": str(dest.resolve()),
+        "resume_job_id": job_id,
+        "resume_job_title": job["title"],
+        "resume_company": job["company_slug"],
+        "resume_updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if "summary" in content:
+        baseline_updates["summary_chars"] = len(content["summary"])
+    if "personal_projects" in content:
+        baseline_updates["personal_projects_chars"] = sum(
+            len(p["title"]) + len(p["description"]) for p in content["personal_projects"]
+        )
+    if "experience" in content:
+        baseline_updates["experience_chars"] = sum(
+            len(bullet) for bullets in content["experience"].values() for bullet in bullets
+        )
+    update_baseline(baseline_updates)
+
     return str(dest)
